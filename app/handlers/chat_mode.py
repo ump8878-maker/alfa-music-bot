@@ -77,15 +77,18 @@ async def bot_added_to_chat(event: ChatMemberUpdated, session: AsyncSession):
     completed = 1 if has_profile else 0
     remaining = MIN_PARTICIPANTS - completed
     
+    profile_line = f"✅ {event.from_user.first_name} уже прошёл тест!\n" if has_profile else ""
+    remaining_line = f"Ещё {remaining} человек — и открою карту вкусов!" if remaining > 0 else ""
+    
     await event.answer(
         f"🎵 <b>Привет! Я покажу, кто с кем тут совпадает по музыке.</b>\n\n"
         f"Пройдите тест (60 сек) — и увидите:\n"
         f"• Карту вкусов чата\n"
         f"• Лучшие совпадения\n"
         f"• Кто тут меломан, а кто попсовик\n\n"
-        f"{'✅ ' + event.from_user.first_name + ' уже прошёл тест!\n' if has_profile else ''}"
+        f"{profile_line}"
         f"📊 Участников: {completed}/{MIN_PARTICIPANTS}\n"
-        f"{'Ещё ' + str(remaining) + ' человек — и открою карту вкусов!' if remaining > 0 else ''}",
+        f"{remaining_line}",
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )
