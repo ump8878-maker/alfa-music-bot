@@ -1,13 +1,13 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import List
 import os
 
 
 class Settings(BaseSettings):
-    bot_token: str
-    database_url: str = "sqlite+aiosqlite:///data/bot.db"
-    admin_ids: List[int] = []
-    debug: bool = True
+    bot_token: str = Field(..., alias="BOT_TOKEN")
+    database_url: str = Field(default="sqlite+aiosqlite:///data/bot.db", alias="DATABASE_URL")
+    debug: bool = Field(default=False, alias="DEBUG")
     
     # Taste test settings
     min_genres: int = 1
@@ -25,9 +25,13 @@ class Settings(BaseSettings):
     mood_weight: float = 0.15
     rarity_weight: float = 0.15
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+        populate_by_name=True,
+    )
 
 
 def get_settings() -> Settings:
