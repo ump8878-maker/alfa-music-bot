@@ -8,7 +8,9 @@ from .data import GENRES, MOODS, ERAS, LANGUAGES, POPULAR_ARTISTS, POPULAR_ARTIS
 def get_start_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура для стартового сообщения"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="🎵 Начать тест", callback_data="start_test")
+    builder.button(text="🚀 Погнали!", callback_data="start_test")
+    builder.button(text="❓ Что это?", callback_data="about_bot")
+    builder.adjust(1)
     return builder.as_markup()
 
 

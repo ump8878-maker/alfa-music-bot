@@ -38,17 +38,19 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
     if profile:
         profile_text = generate_profile_text(profile)
         await message.answer(
-            f"👋 С возвращением!\n\n{profile_text}",
-            reply_markup=get_profile_keyboard()
+            f"👋 С возвращением, {message.from_user.first_name}!\n\n{profile_text}",
+            reply_markup=get_profile_keyboard(),
+            parse_mode="HTML"
         )
     else:
         await message.answer(
-            "🎵 <b>Привет! Я — Альфа.</b>\n\n"
-            "Пройди тест за 60 секунд — узнаешь:\n"
-            "• Какой у тебя музыкальный ДНК\n"
-            "• С кем из друзей совпадаешь\n"
-            "• Насколько редкий твой вкус\n\n"
-            "Без регистрации. Без спама.",
+            f"🎧 <b>Йо, {message.from_user.first_name}!</b>\n\n"
+            "Я — <b>Альфа</b>, бот который знает о музыке всё.\n\n"
+            "🎵 Пройди короткий тест и узнай:\n"
+            "├ Какой ты меломан на самом деле\n"
+            "├ Кто слушает то же самое\n"
+            "└ Насколько уникален твой вкус\n\n"
+            "⏱ <i>Займёт меньше минуты</i>",
             reply_markup=get_start_keyboard(),
             parse_mode="HTML"
         )
@@ -76,6 +78,29 @@ async def start_test(callback: CallbackQuery, state: FSMContext):
 async def restart_test(callback: CallbackQuery, state: FSMContext):
     """Перезапуск теста"""
     await start_test(callback, state)
+
+
+@router.callback_query(F.data == "about_bot")
+async def about_bot(callback: CallbackQuery):
+    """Информация о боте"""
+    await callback.message.edit_text(
+        "🎧 <b>Альфа — бот для поиска музыкальных совпадений</b>\n\n"
+        "🔹 <b>Как это работает?</b>\n"
+        "Ты отвечаешь на несколько вопросов о музыке, "
+        "а я составляю твой уникальный профиль и нахожу людей "
+        "с похожим вкусом.\n\n"
+        "🔹 <b>Что можно делать?</b>\n"
+        "• Узнать свой музыкальный архетип\n"
+        "• Найти людей с похожим вкусом\n"
+        "• Добавить бота в чат друзей\n"
+        "• Увидеть карту вкусов группы\n"
+        "• Устроить баттл вкусов\n\n"
+        "🔹 <b>Это бесплатно?</b>\n"
+        "Да, полностью бесплатно!",
+        reply_markup=get_start_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 @router.message(Command("profile"))
