@@ -23,13 +23,23 @@ def profile_completeness(profile: MusicProfile) -> float:
 
 
 def compute_user_taste_score(profile: MusicProfile) -> int:
-    """Вкус 0–100: полнота квиза (до 50) + разнообразие жанров/артистов (до 50). Без предвзятости к жанрам."""
+    """
+    Вкус 0–100: полнота квиза (45) + разнообразие выбора (45) + бонус редкости (10).
+    Полнота: все 4 поля заполнены. Разнообразие: 2–4 жанра и несколько артистов дают макс.
+    Редкость: вкус «не только из чартов» даёт до +10. Без предвзятости к жанрам.
+    """
     completeness = profile_completeness(profile)
     n_genres = len(profile.genres or [])
     n_artists = len(profile.artists or [])
-    diversity = min(n_genres / 4, 1.0) * 25 + min(n_artists / 10, 1.0) * 25
-    completeness_bonus = completeness * 50
-    score = completeness_bonus + diversity
+    # Разнообразие: сладкая точка 2–4 жанра, 3–10 артистов (не наказываем за 1, но макс за разнообразие)
+    genre_part = min(n_genres / 4, 1.0) * 22.5
+    artist_part = min(n_artists / 10, 1.0) * 22.5
+    diversity = genre_part + artist_part
+    completeness_bonus = completeness * 45
+    # Небольшой бонус за редкий вкус (0–10), чтобы оценка была интереснее
+    rarity = getattr(profile, "rarity_score", 0.5) or 0.5
+    rarity_bonus = rarity * 10
+    score = completeness_bonus + diversity + rarity_bonus
     return min(100, max(0, int(score)))
 
 

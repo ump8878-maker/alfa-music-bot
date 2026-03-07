@@ -15,9 +15,10 @@ from services.rating_helpers import (
 
 WEIGHT_ACTIVITY = 25
 WEIGHT_COMPLETENESS = 25
-WEIGHT_CONSISTENCY = 25
-WEIGHT_DIVERSITY = 15
-WEIGHT_ENGAGEMENT = 10
+WEIGHT_CONSISTENCY = 25   # равномерность заполнения квиза (не похожесть вкусов)
+WEIGHT_DIVERSITY = 12
+WEIGHT_ENGAGEMENT = 8
+WEIGHT_RARITY = 5        # бонус чату за среднюю редкость вкуса (интереснее)
 
 
 @dataclass
@@ -80,7 +81,11 @@ async def calculate_chat_rating(session: AsyncSession, chat_id: int) -> float:
     else:
         engagement = WEIGHT_ENGAGEMENT / 2
 
-    rating = activity + completeness + consistency + diversity + engagement
+    # Небольшой бонус за среднюю редкость вкуса в чате (чаты с разнообразным вкусом чуть выше)
+    avg_rarity = sum(getattr(p, "rarity_score", 0.5) or 0.5 for p in profiles) / len(profiles)
+    rarity_bonus = avg_rarity * WEIGHT_RARITY
+
+    rating = activity + completeness + consistency + diversity + engagement + rarity_bonus
     rating = min(100.0, max(0.0, round(rating, 1)))
 
     if chat:
@@ -166,10 +171,10 @@ async def get_needed_participants_for_next_rank(
     needed_count = 1 if current_position > 1 else 0
     if current_position > 1 and next_competitor:
         diff = next_competitor.rating - chat.rating
-        if diff > 5:
-            needed_count = 2
-        elif diff > 10:
+        if diff > 10:
             needed_count = 3
+        elif diff > 5:
+            needed_count = 2
 
     return NeededForNextRank(
         current_position=current_position,

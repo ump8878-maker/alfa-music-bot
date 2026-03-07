@@ -11,10 +11,10 @@ from config import settings
 from database.models import User, Chat, ChatMember, MusicProfile
 from keyboards import get_chat_test_keyboard, get_chat_menu_keyboard
 from services.chat_analytics import (
-    collect_chat_music_stats,
     calculate_chat_profile,
     generate_chat_comment,
 )
+from services.rating_helpers import get_chat_member_ranking
 from services.chat_rating import (
     calculate_chat_rating,
     get_chat_rank,
@@ -105,10 +105,6 @@ async def try_send_growth_message(
         logger.debug("Growth message not sent: %s", e)
 
 
-def _is_group_or_supergroup(chat_type: str | None) -> bool:
-    return chat_type in ("group", "supergroup")
-
-
 @router.my_chat_member(ChatMemberUpdatedFilter(IS_NOT_MEMBER >> IS_MEMBER))
 async def bot_added_to_chat(
     event: ChatMemberUpdated, session: AsyncSession
@@ -194,23 +190,12 @@ async def bot_removed_from_chat(
 @router.message(Command("chat_scan"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
 async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
     chat_id = message.chat.id
-    stats = await collect_chat_music_stats(session, chat_id)
-    if not stats:
-        bot_info = await message.bot.get_me()
-        await message.answer(
-            f"Пока мало данных: нужно минимум {MIN_PARTICIPANTS} участников с пройденным тестом.\n\n"
-            "Пройди тест — и попроси друзей 👇",
-            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
-            parse_mode="HTML",
-        )
-        return
-
     profile = await calculate_chat_profile(session, chat_id)
     if not profile:
         bot_info = await message.bot.get_me()
         await message.answer(
-            f"Пока мало данных: нужно минимум {MIN_PARTICIPANTS} участников с тестом.\n\n"
-            "Пройти тест 👇",
+            f"Пока мало данных: нужно минимум {MIN_PARTICIPANTS} участников с пройденным тестом.\n\n"
+            "Пройди тест — и попроси друзей 👇",
             reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
             parse_mode="HTML",
         )
@@ -230,7 +215,7 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         f"<b>{profile.profile_name}</b>\n",
         f"Вайб: {profile.vibe_text}\n",
         f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
-        "<i>Рейтинг вкуса: полнота квиза (жанры, артисты, настроение, когда слушаешь) + разнообразие. Без предвзятости к жанрам.</i>\n",
+        "<i>Рейтинг вкуса: полнота квиза + разнообразие выбора + небольшой бонус за редкий вкус. Без предвзятости к жанрам.</i>\n",
         f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
         "<i>Шкала: слева — популярные чарты (Яндекс.Музыка, Beatport, DJ Mag), справа — более редкий вкус.</i>\n",
     ]
@@ -240,6 +225,15 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         lines.append(
             f"<b>По редкости:</b> {main_c} чел. — ближе к чартам, {rare_c} чел. — более редкий вкус.\n"
         )
+    # Топ участников по баллу вкуса — итоговая оценка участников чата
+    ranking = await get_chat_member_ranking(session, chat_id)
+    if ranking:
+        lines.append("\n<b>Топ по вкусу в чате:</b>")
+        for i, (user, _, score) in enumerate(ranking[:5], 1):
+            name = user.display_name or user.mention or f"Участник {i}"
+            if len(name) > 25:
+                name = name[:22] + "…"
+            lines.append(f"  {i}. {name} — <b>{score}</b>/100")
     if profile.genre_stats:
         lines.append("\n<b>Жанры:</b>")
         for name, pct in profile.genre_stats[:8]:
