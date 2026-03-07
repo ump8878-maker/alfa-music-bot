@@ -18,7 +18,7 @@ def get_genre_keyboard(selected: Set[str] = None) -> InlineKeyboardMarkup:
         is_selected = genre["id"] in selected
         text = f"✅ {genre['emoji']} {genre['name']}" if is_selected else f"{genre['emoji']} {genre['name']}"
         builder.button(text=text, callback_data=f"genre:{genre['id']}")
-    builder.row(InlineKeyboardButton(text="✏️ Свой вариант", callback_data="genre:other"))
+    builder.row(InlineKeyboardButton(text="✏️ Предложить свой вариант", callback_data="genre:other"))
     builder.adjust(3)
     if selected:
         builder.row(
@@ -74,7 +74,7 @@ def get_mood_keyboard() -> InlineKeyboardMarkup:
             text=f"{mood['emoji']} {mood['name']}",
             callback_data=f"mood:{mood['id']}",
         )
-    builder.row(InlineKeyboardButton(text="✏️ Свой вариант", callback_data="mood:other"))
+    builder.row(InlineKeyboardButton(text="✏️ Предложить свой вариант", callback_data="mood:other"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -109,4 +109,14 @@ def get_profile_keyboard(bot_username: str) -> InlineKeyboardMarkup:
         url=f"https://t.me/{bot_username}?startgroup=test",
     )
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_finish_quiz_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    """В конце теста: кнопка «Добавить в чат с друзьями» — по нажатию открывается выбор чата."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="👥 Добавить в чат с друзьями",
+        url=f"https://t.me/{bot_username}?startgroup=share",
+    )
     return builder.as_markup()

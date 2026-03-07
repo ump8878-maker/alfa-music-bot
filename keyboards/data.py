@@ -17,13 +17,14 @@ GENRES = [
     {"id": "other", "name": "Другое", "emoji": "✏️"},
 ]
 
+# Российские — по-русски (кириллица), остальные — на английском
 POPULAR_ARTISTS = {
-    "pop": ["Zivert", "Тейлор Свифт", "The Weeknd", "Билли Айлиш", "Оливия Родриго"],
+    "pop": ["Зиверт", "Taylor Swift", "The Weeknd", "Billie Eilish", "Olivia Rodrigo"],
     "rock": ["Кино", "Би-2", "Arctic Monkeys", "Queen", "Nirvana"],
-    "hiphop": ["Баста", "Oxxxymiron", "Дрейк", "Кендрик Ламар", "Travis Scott"],
+    "hiphop": ["Баста", "Оксимирон", "Drake", "Kendrick Lamar", "Travis Scott"],
     "indie": ["Монеточка", "Tame Impala", "Cigarettes After Sex", "The 1975", "Мукка"],
     "electronic": ["Fred again..", "Peggy Gou", "Charlotte de Witte", "Daft Punk", "Skrillex"],
-    "rnb": ["Frank Ocean", "SZA", "The Weeknd", "Мари Краймбрери", "Jony"],
+    "rnb": ["Frank Ocean", "SZA", "The Weeknd", "Мари Краймбрери", "Джони"],
     "metal": ["Metallica", "Rammstein", "Ария", "Louna", "Slipknot"],
     "jazz": ["Miles Davis", "Norah Jones", "Robert Glasper", "Пелагея", "Snarky Puppy"],
     "classical": ["Бах", "Моцарт", "Ludovico Einaudi", "Max Richter", "Ólafur Arnalds"],
@@ -40,11 +41,11 @@ def get_popular_artists_set():
     s.update(a.strip() for a in POPULAR_ARTISTS_RU if a)
     return s
 
-# Дополнительные артисты для микса
+# Дополнительные российские артисты для микса (по-русски)
 POPULAR_ARTISTS_RU = [
-    "MORGENSHTERN", "Баста", "ЛСП", "Скриптонит", "Монеточка", "Zivert",
-    "Би-2", "Кино", "Сплин", "Земфира", "Порнофильмы", "ANNA ASTI",
-    "Клава Кока", "Jony", "Cream Soda", "Little Big",
+    "Моргенштерн", "Баста", "ЛСП", "Скриптонит", "Монеточка", "Зиверт",
+    "Би-2", "Кино", "Сплин", "Земфира", "Порнофильмы", "Анна Асти",
+    "Клава Кока", "Джони", "Крим Сода", "Литл Биг",
 ]
 
 

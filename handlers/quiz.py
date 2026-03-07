@@ -11,6 +11,7 @@ from keyboards import (
     get_artist_keyboard,
     get_when_listen_keyboard,
     get_mood_keyboard,
+    get_finish_quiz_keyboard,
 )
 from keyboards.data import GENRES
 from states import QuizStates
@@ -266,5 +267,10 @@ async def select_mood_and_finish(
         await callback.message.delete()
     except Exception:
         pass
-    await callback.message.answer(result_text, parse_mode="HTML")
+    bot_info = await callback.bot.get_me()
+    await callback.message.answer(
+        result_text,
+        reply_markup=get_finish_quiz_keyboard(bot_info.username),
+        parse_mode="HTML",
+    )
     await callback.answer("🎉 Профиль создан!")

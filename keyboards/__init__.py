@@ -8,6 +8,7 @@ from .inline import (
     get_chat_test_keyboard,
     get_chat_menu_keyboard,
     get_profile_keyboard,
+    get_finish_quiz_keyboard,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "get_chat_test_keyboard",
     "get_chat_menu_keyboard",
     "get_profile_keyboard",
+    "get_finish_quiz_keyboard",
 ]
