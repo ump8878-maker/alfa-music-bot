@@ -2,6 +2,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.fsm.context import FSMContext
+from aiogram.enums import ChatType
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,15 +12,17 @@ from states import QuizStates
 from services.rating_helpers import compute_user_taste_score
 
 router = Router()
+BOT_VERSION = "v2 · скан и рейтинг чатов"
 
 
-@router.message(CommandStart())
-async def cmd_start(
+@router.message(CommandStart(), F.chat.type == ChatType.PRIVATE)
+async def cmd_start_private(
     message: Message,
     session: AsyncSession,
     state: FSMContext,
     command: CommandObject | None = None,
 ):
+    """Старт только в личке: полное меню и тест."""
     user_id = message.from_user.id
     args = (command.args or "").strip() if command else ""
 
@@ -47,7 +50,8 @@ async def cmd_start(
         "Четыре шага — жанры, артисты, когда слушаешь, настроение.\n\n"
         "📊 <b>Рейтинги:</b> свой вкус — /profile, топ чатов — /top_chats.\n"
         "👥 <b>В группе</b> (добавь бота): скан чата — /chat_scan, рейтинг чата — /chat_rating.\n"
-        "🏆 Соревнование: место в рейтинге чата после теста, топ чатов — /top_chats."
+        "🏆 Соревнование: место в рейтинге чата после теста, топ чатов — /top_chats.\n\n"
+        f"<i>{BOT_VERSION}</i>"
     )
     await message.answer(
         text,
@@ -56,9 +60,25 @@ async def cmd_start(
     )
 
 
-@router.message(Command("profile"))
+@router.message(CommandStart(), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def cmd_start_group(message: Message, session: AsyncSession):
+    """В группе: короткая подсказка, тест — в личку."""
+    bot_info = await message.bot.get_me()
+    text = (
+        "👋 В группе я умею: <b>/chat_scan</b> (скан вкусов), <b>/chat_rating</b> (рейтинг чата).\n"
+        "Тест и профиль — только в личке. Напиши мне в личные сообщения 👇"
+    )
+    from keyboards.inline import get_chat_test_keyboard
+    await message.answer(
+        text,
+        reply_markup=get_chat_test_keyboard(bot_info.username, message.chat.id),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("profile"), F.chat.type == ChatType.PRIVATE)
 async def cmd_profile(message: Message, session: AsyncSession):
-    """Профиль: архетип, вкус, кнопки «Пройти заново» и «Добавить в чат»."""
+    """Профиль только в личке: архетип, вкус, кнопки."""
     user_id = message.from_user.id
     result = await session.execute(
         select(MusicProfile).where(MusicProfile.user_id == user_id)
@@ -92,10 +112,9 @@ async def cmd_profile(message: Message, session: AsyncSession):
     )
 
 
-@router.message(Command("help"))
+@router.message(Command("help"), F.chat.type == ChatType.PRIVATE)
 async def cmd_help(message: Message, session: AsyncSession):
-    """Справка: рейтинги, чаты, аналитика, соревнования."""
-    bot_info = await message.bot.get_me()
+    """Справка только в личке."""
     text = (
         "📋 <b>Команды</b>\n\n"
         "🎧 <b>Тест:</b> /start → «Начать тест» — 4 шага, потом профиль и вкус.\n\n"
@@ -111,6 +130,28 @@ async def cmd_help(message: Message, session: AsyncSession):
         "  /top_chats — соревнование чатов между собой."
     )
     await message.answer(text, parse_mode="HTML")
+
+
+@router.message(Command("profile"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def cmd_profile_group(message: Message):
+    """В группе: подсказка писать в личку."""
+    from keyboards.inline import get_chat_test_keyboard
+    bot_info = await message.bot.get_me()
+    await message.answer(
+        "Профиль и тест — только в личке. Открой бота в личке 👇",
+        reply_markup=get_chat_test_keyboard(bot_info.username, message.chat.id),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("help"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def cmd_help_group(message: Message):
+    """В группе: подсказка про команды здесь и в личке."""
+    await message.answer(
+        "Здесь: <b>/chat_scan</b> — скан вкусов чата, <b>/chat_rating</b> — рейтинг чата.\n"
+        "В личке: /start, /profile, /top_chats, /help.",
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data == "start_test")

@@ -36,7 +36,7 @@ async def on_startup(bot: Bot) -> None:
         BotCommand(command="help", description="Рейтинги, чаты, аналитика"),
     ])
     bot_info = await bot.get_me()
-    logger.info("Bot started: @%s", bot_info.username)
+    logger.info("Bot started: @%s (entry: main.py)", bot_info.username)
 
 
 async def on_shutdown(bot: Bot) -> None:
