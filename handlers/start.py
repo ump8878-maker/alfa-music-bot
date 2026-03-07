@@ -1,12 +1,14 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from database.models import User
-from keyboards import get_start_keyboard
+from database.models import User, MusicProfile
+from keyboards import get_start_keyboard, get_profile_keyboard
 from states import QuizStates
+from services.rating_helpers import compute_user_taste_score
 
 router = Router()
 
@@ -42,14 +44,73 @@ async def cmd_start(
 
     text = (
         "🎧 <b>Музыкальный тест</b>\n\n"
-        "Четыре шага — жанры, артисты, когда слушаешь, настроение.\n"
-        "В группах увидишь скан чата и рейтинг."
+        "Четыре шага — жанры, артисты, когда слушаешь, настроение.\n\n"
+        "📊 <b>Рейтинги:</b> свой вкус — /profile, топ чатов — /top_chats.\n"
+        "👥 <b>В группе</b> (добавь бота): скан чата — /chat_scan, рейтинг чата — /chat_rating.\n"
+        "🏆 Соревнование: место в рейтинге чата после теста, топ чатов — /top_chats."
     )
     await message.answer(
         text,
         reply_markup=get_start_keyboard(),
         parse_mode="HTML",
     )
+
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message, session: AsyncSession):
+    """Профиль: архетип, вкус, кнопки «Пройти заново» и «Добавить в чат»."""
+    user_id = message.from_user.id
+    result = await session.execute(
+        select(MusicProfile).where(MusicProfile.user_id == user_id)
+    )
+    profile = result.scalar_one_or_none()
+    bot_info = await message.bot.get_me()
+
+    if not profile:
+        text = (
+            "Профиля пока нет. Пройди тест — жанры, артисты, когда слушаешь, настроение.\n\n"
+            "После теста увидишь архетип, вкус 0–100 и место в рейтинге чата (если проходил из группы)."
+        )
+        await message.answer(
+            text,
+            reply_markup=get_start_keyboard(),
+            parse_mode="HTML",
+        )
+        return
+
+    taste = compute_user_taste_score(profile)
+    text = (
+        f"🎧 <b>Твой профиль</b>\n\n"
+        f"<b>Архетип:</b> {profile.profile_type}\n"
+        f"<b>Вкус:</b> {taste}/100\n\n"
+        "Пройти заново или добавить бота в чат — кнопки ниже."
+    )
+    await message.answer(
+        text,
+        reply_markup=get_profile_keyboard(bot_info.username),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, session: AsyncSession):
+    """Справка: рейтинги, чаты, аналитика, соревнования."""
+    bot_info = await message.bot.get_me()
+    text = (
+        "📋 <b>Команды</b>\n\n"
+        "🎧 <b>Тест:</b> /start → «Начать тест» — 4 шага, потом профиль и вкус.\n\n"
+        "📊 <b>Рейтинги:</b>\n"
+        "  /profile — твой архетип и вкус (0–100)\n"
+        "  /top_chats — глобальный топ чатов по вкусу\n"
+        "  В группе: /chat_rating — рейтинг и место этого чата\n\n"
+        "👥 <b>Чаты и аналитика:</b>\n"
+        "  Добавь бота в группу → /chat_scan (жанры, артисты, вайб чата)\n"
+        "  /chat_rating — балл чата и сколько добрать до роста\n\n"
+        "🏆 <b>Соревнования:</b>\n"
+        "  После теста в группе — твоё место в рейтинге чата.\n"
+        "  /top_chats — соревнование чатов между собой."
+    )
+    await message.answer(text, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "start_test")

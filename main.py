@@ -4,6 +4,7 @@ import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 
@@ -28,6 +29,12 @@ logger = logging.getLogger(__name__)
 async def on_startup(bot: Bot) -> None:
     logger.info("Initializing database...")
     await init_db()
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Старт и начало теста"),
+        BotCommand(command="profile", description="Мой профиль и вкус"),
+        BotCommand(command="top_chats", description="Топ чатов по рейтингу"),
+        BotCommand(command="help", description="Рейтинги, чаты, аналитика"),
+    ])
     bot_info = await bot.get_me()
     logger.info("Bot started: @%s", bot_info.username)
 

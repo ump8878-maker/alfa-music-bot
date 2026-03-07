@@ -87,11 +87,23 @@ def get_chat_test_keyboard(bot_username: str, chat_id: int = 0) -> InlineKeyboar
 
 
 def get_chat_menu_keyboard(bot_username: str, chat_id: int) -> InlineKeyboardMarkup:
-    """Меню чата: скан, рейтинг, топ, пройти тест."""
+    """Меню чата: пройти тест."""
     builder = InlineKeyboardBuilder()
     builder.button(
         text="🎵 Пройти тест",
         url=f"https://t.me/{bot_username}?start=from_chat_{chat_id}",
+    )
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_profile_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    """Профиль: пройти заново, добавить в чат."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 Пройти заново", callback_data="start_test")
+    builder.button(
+        text="👥 Добавить в чат",
+        url=f"https://t.me/{bot_username}?startgroup=test",
     )
     builder.adjust(1)
     return builder.as_markup()
