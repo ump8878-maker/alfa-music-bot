@@ -1,30 +1,59 @@
-# Конфиг: только то, что нужно для бота и двух механик (сканер + рейтинг чата)
+# Конфиг: BOT_TOKEN, DATABASE_URL и опции. Работает без pydantic_settings.
 import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 
-class Settings(BaseSettings):
-    bot_token: str = Field(..., alias="BOT_TOKEN")
-    database_url: str = Field(default="sqlite+aiosqlite:///data/bot.db", alias="DATABASE_URL")
-    debug: bool = Field(default=False, alias="DEBUG")
+def _env(key: str, default: str = "") -> str:
+    v = os.environ.get(key, default)
+    return (v or "").strip()
 
-    min_participants_for_scan: int = Field(default=3, alias="MIN_PARTICIPANTS_FOR_SCAN")
-    growth_message_cooldown_hours: float = Field(default=3.0, alias="GROWTH_MESSAGE_COOLDOWN_HOURS")
 
-    @field_validator("bot_token", mode="before")
-    @classmethod
-    def strip_token(cls, v):
-        if isinstance(v, str):
-            return "".join(v.split())
-        return v
+def _env_bool(key: str, default: bool = False) -> bool:
+    return _env(key).lower() in ("1", "true", "yes")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        populate_by_name=True,
-    )
+
+def _env_int(key: str, default: int = 0) -> int:
+    try:
+        return int(_env(key) or default)
+    except ValueError:
+        return default
+
+
+def _env_float(key: str, default: float = 0.0) -> float:
+    try:
+        return float(_env(key) or default)
+    except ValueError:
+        return default
+
+
+class Settings:
+    """Конфиг из переменных окружения (без зависимости от pydantic_settings)."""
+
+    @property
+    def bot_token(self) -> str:
+        raw = _env("BOT_TOKEN")
+        return "".join(raw.split())  # убрать пробелы
+
+    @property
+    def database_url(self) -> str:
+        return _env("DATABASE_URL") or "sqlite+aiosqlite:///data/bot.db"
+
+    @property
+    def debug(self) -> bool:
+        return _env_bool("DEBUG", False)
+
+    @property
+    def min_participants_for_scan(self) -> int:
+        return _env_int("MIN_PARTICIPANTS_FOR_SCAN", 3)
+
+    @property
+    def growth_message_cooldown_hours(self) -> float:
+        return _env_float("GROWTH_MESSAGE_COOLDOWN_HOURS", 3.0)
 
 
 settings = Settings()
