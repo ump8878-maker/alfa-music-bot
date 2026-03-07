@@ -16,6 +16,7 @@ from keyboards.data import GENRES
 from states import QuizStates
 from services.rating_helpers import (
     compute_user_taste_score,
+    compute_rarity_score,
     get_chat_member_ranking,
     get_user_rank_in_chat,
 )
@@ -79,9 +80,38 @@ async def genres_done(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(QuizStates.selecting_artists, F.data == "artist:custom")
+async def ask_custom_artist(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(QuizStates.entering_custom_artist)
+    await callback.message.answer(
+        "Напиши имя артиста или несколько через запятую — добавлю в выбор."
+    )
+    await callback.answer()
+
+
+@router.message(QuizStates.entering_custom_artist, F.text)
+async def add_custom_artist(message: Message, state: FSMContext):
+    data = await state.get_data()
+    selected = set(data.get("selected_artists") or [])
+    genres_list = data.get("genres_list", [])
+    parts = [p.strip() for p in (message.text or "").split(",") if p.strip()]
+    for name in parts:
+        if name and len(name) <= 100:
+            selected.add(name)
+    await state.update_data(selected_artists=list(selected))
+    await state.set_state(QuizStates.selecting_artists)
+    count = len(parts)
+    await message.answer(
+        f"Добавлено: {', '.join(parts[:5])}{'…' if count > 5 else ''}. Выбери ещё или нажми «Готово».",
+        reply_markup=get_artist_keyboard(genres_list, selected),
+    )
+
+
 @router.callback_query(QuizStates.selecting_artists, F.data.startswith("artist:"))
 async def select_artist(callback: CallbackQuery, state: FSMContext):
     artist_name = callback.data.split(":", 1)[1]
+    if artist_name == "custom":
+        return
     data = await state.get_data()
     selected = set(data.get("selected_artists") or [])
     genres_list = data.get("genres_list", [])
@@ -153,6 +183,7 @@ async def select_mood_and_finish(
 
     genres = [{"name": g, "weight": 1.0} for g in selected_genres]
     artists = [{"name": a} for a in selected_artists]
+    rarity = compute_rarity_score(selected_artists)
 
     result = await session.execute(
         select(MusicProfile).where(MusicProfile.user_id == user_id)
@@ -163,7 +194,7 @@ async def select_mood_and_finish(
         profile.artists = artists
         profile.mood = mood_id
         profile.listening_time = listening_time
-        profile.rarity_score = 0.5
+        profile.rarity_score = rarity
     else:
         profile = MusicProfile(
             user_id=user_id,
@@ -171,7 +202,7 @@ async def select_mood_and_finish(
             artists=artists,
             mood=mood_id,
             listening_time=listening_time,
-            rarity_score=0.5,
+            rarity_score=rarity,
         )
         session.add(profile)
 

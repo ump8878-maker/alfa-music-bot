@@ -32,6 +32,14 @@ POPULAR_ARTISTS = {
     "soul": ["Aretha Franklin", "Stevie Wonder", "Amy Winehouse", "Bruno Mars", "D'Angelo"],
 }
 
+# Множество «популярных» артистов (Яндекс.Музыка, чарты, Beatport, DJ Mag — условно)
+def get_popular_artists_set():
+    s = set()
+    for lst in POPULAR_ARTISTS.values():
+        s.update(a.strip() for a in lst if a)
+    s.update(a.strip() for a in POPULAR_ARTISTS_RU if a)
+    return s
+
 # Дополнительные артисты для микса
 POPULAR_ARTISTS_RU = [
     "MORGENSHTERN", "Баста", "ЛСП", "Скриптонит", "Монеточка", "Zivert",

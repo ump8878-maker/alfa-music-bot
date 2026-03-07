@@ -39,6 +39,9 @@ def get_artist_keyboard(genres: List[str], selected: Set[str] = None) -> InlineK
         text = f"✅ {artist}" if is_selected else artist
         builder.button(text=text, callback_data=f"artist:{artist}")
     builder.adjust(2)
+    builder.row(
+        InlineKeyboardButton(text="✏️ Предложить свой вариант", callback_data="artist:custom")
+    )
     if selected:
         builder.row(
             InlineKeyboardButton(

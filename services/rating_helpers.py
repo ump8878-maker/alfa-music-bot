@@ -23,7 +23,7 @@ def profile_completeness(profile: MusicProfile) -> float:
 
 
 def compute_user_taste_score(profile: MusicProfile) -> int:
-    """Вкус пользователя 0–100: полнота + разнообразие (без предвзятости к жанрам)."""
+    """Вкус 0–100: полнота квиза (до 50) + разнообразие жанров/артистов (до 50). Без предвзятости к жанрам."""
     completeness = profile_completeness(profile)
     n_genres = len(profile.genres or [])
     n_artists = len(profile.artists or [])
@@ -31,6 +31,26 @@ def compute_user_taste_score(profile: MusicProfile) -> int:
     completeness_bonus = completeness * 50
     score = completeness_bonus + diversity
     return min(100, max(0, int(score)))
+
+
+def compute_rarity_score(artist_names: list) -> float:
+    """
+    Редкость вкуса 0..1 по артистам. Опора на списки популярных (Яндекс.Музыка, Beatport, DJ Mag, чарты).
+    0 = все артисты из популярных чартов, 1 = все реже/не из списка.
+    """
+    if not artist_names:
+        return 0.5
+    try:
+        from keyboards.data import get_popular_artists_set
+        popular = get_popular_artists_set()
+        names = [a.strip() for a in artist_names if a and isinstance(a, str)]
+        if not names:
+            return 0.5
+        in_popular = sum(1 for n in names if n in popular)
+        share_popular = in_popular / len(names)
+        return round(1.0 - share_popular, 2)
+    except Exception:
+        return 0.5
 
 
 async def get_chat_member_ranking(

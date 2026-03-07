@@ -217,12 +217,29 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         return
 
     comment = generate_chat_comment(profile)
+    # Шкала редкости: 0% = чарты, 100% = редкий вкус
+    r = getattr(profile, "avg_rarity", 0.5) or 0.5
+    rare_pct = int(r * 100)
+    bar_len = 10
+    filled = int(rare_pct / 100 * bar_len)
+    scale_bar = "█" * filled + "░" * (bar_len - filled)
+    rarity_label = "редкий вкус" if rare_pct >= 50 else "ближе к чартам"
+
     lines = [
-        f"🎧 <b>Музыкальный скан чата</b>\n",
+        "🎧 <b>Музыкальный скан чата</b>\n",
         f"<b>{profile.profile_name}</b>\n",
         f"Вайб: {profile.vibe_text}\n",
-        f"Средний вкус: {profile.overall_score}/100\n",
+        f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
+        "<i>Рейтинг вкуса: полнота квиза (жанры, артисты, настроение, когда слушаешь) + разнообразие. Без предвзятости к жанрам.</i>\n",
+        f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
+        "<i>Шкала: слева — популярные чарты (Яндекс.Музыка, Beatport, DJ Mag), справа — более редкий вкус.</i>\n",
     ]
+    rare_c = getattr(profile, "rare_count", 0)
+    main_c = getattr(profile, "mainstream_count", 0)
+    if rare_c + main_c > 0:
+        lines.append(
+            f"<b>По редкости:</b> {main_c} чел. — ближе к чартам, {rare_c} чел. — более редкий вкус.\n"
+        )
     if profile.genre_stats:
         lines.append("\n<b>Жанры:</b>")
         for name, pct in profile.genre_stats[:8]:

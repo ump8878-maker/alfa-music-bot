@@ -22,6 +22,9 @@ class ChatProfile:
     top_artists: List[str]
     vibe_text: str
     overall_score: float
+    avg_rarity: float  # 0 = чарты, 1 = редкий
+    rare_count: int
+    mainstream_count: int
 
 
 async def collect_chat_music_stats(
@@ -58,9 +61,18 @@ async def collect_chat_music_stats(
     mood_counts: Dict[str, int] = {}
     listening_counts: Dict[str, int] = {}
     total_score = 0.0
+    rarity_sum = 0.0
+    rare_count = 0
+    mainstream_count = 0
 
     for p in profiles:
         total_score += compute_user_taste_score(p)
+        r = getattr(p, "rarity_score", 0.5) or 0.5
+        rarity_sum += r
+        if r > 0.5:
+            rare_count += 1
+        else:
+            mainstream_count += 1
         for g in p.genres or []:
             name = (g.get("name") or "").strip().lower() or "другое"
             if name in ("свой вариант", "other"):
@@ -93,6 +105,7 @@ async def collect_chat_music_stats(
         max(listening_counts.items(), key=lambda x: x[1])[0] if listening_counts else None
     )
     avg_score = total_score / len(profiles) if profiles else 0
+    avg_rarity = round(rarity_sum / len(profiles), 2) if profiles else 0.5
 
     return {
         "participants_count": len(profiles),
@@ -102,6 +115,9 @@ async def collect_chat_music_stats(
         "dominant_listening": dominant_listening,
         "avg_score": round(avg_score, 1),
         "genre_counts": genre_counts,
+        "avg_rarity": avg_rarity,
+        "rare_count": rare_count,
+        "mainstream_count": mainstream_count,
     }
 
 
@@ -166,6 +182,9 @@ async def calculate_chat_profile(
     genre_stats = stats.get("genre_pcts") or []
     top_artists = stats.get("top_artists") or []
     overall_score = stats.get("avg_score", 0)
+    avg_rarity = stats.get("avg_rarity", 0.5)
+    rare_count = stats.get("rare_count", 0)
+    mainstream_count = stats.get("mainstream_count", 0)
 
     return ChatProfile(
         profile_name=profile_name,
@@ -173,6 +192,9 @@ async def calculate_chat_profile(
         top_artists=top_artists,
         vibe_text=vibe_text,
         overall_score=overall_score,
+        avg_rarity=avg_rarity,
+        rare_count=rare_count,
+        mainstream_count=mainstream_count,
     )
 
 
