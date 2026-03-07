@@ -7,6 +7,7 @@ from .battle import Battle, BattleVote
 from .prediction import PredictionRound, PredictionAnswer
 from .payment import Payment, UserUnlock
 from .quiz_result import QuizResult
+from .chat_stats import ChatStats
 
 __all__ = [
     "Base",
@@ -25,4 +26,5 @@ __all__ = [
     "Payment",
     "UserUnlock",
     "QuizResult",
+    "ChatStats",
 ]

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     
     # Chat settings
     min_participants_for_map: int = 3
+    # Минимум участников для сканера чата
+    min_participants_for_scan: int = Field(default=3, alias="MIN_PARTICIPANTS_FOR_SCAN")
+    # Защита от спама: не чаще одного мотивирующего сообщения в N часов на чат
+    growth_message_cooldown_hours: float = Field(default=3.0, alias="GROWTH_MESSAGE_COOLDOWN_HOURS")
     
     # Matching settings
     genre_weight: float = 0.30

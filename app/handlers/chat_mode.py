@@ -13,17 +13,22 @@ from app.rating import (
     get_chat_member_ranking,
     get_chat_genre_stats,
     get_chat_position,
-    update_chat_rating,
 )
-from app.utils.humor import (
-    get_chat_position_comment,
-    get_top_comment,
-    get_strange_taste_comment,
+from app.utils.humor import get_chat_position_comment, get_top_comment, get_growth_comment
+from app.services.chat_analytics import (
+    calculate_chat_profile,
+    generate_chat_comment,
 )
+from app.chat_rating import (
+    calculate_chat_rating,
+    get_chat_rank,
+    get_needed_participants_for_next_rank,
+    can_send_growth_message,
+    mark_growth_message_sent,
+)
+from config import settings
 
 router = Router()
-import random
-import asyncio
 
 MIN_PARTICIPANTS = 3
 
@@ -79,21 +84,38 @@ async def post_quiz_result_to_chat(
         reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
         parse_mode="HTML",
     )
-    # Вирусная механика: с вероятностью ~15% пишем «в чате обнаружен человек с очень странным вкусом»
-    if random.random() < 0.15:
-        asyncio.create_task(_send_strange_taste_later(bot, chat_id, bot_info.username))
+    # Мотивирующее сообщение о росте рейтинга (с cooldown)
+    await try_send_growth_message(bot, session, chat_id)
 
 
-async def _send_strange_taste_later(bot, chat_id: int, bot_username: str):
-    await asyncio.sleep(3)
-    comment = get_strange_taste_comment()
-    from app.keyboards import get_chat_test_keyboard
+async def try_send_growth_message(bot, session: AsyncSession, chat_id: int) -> None:
+    """
+    Отправляет мотивирующее сообщение в чат (рейтинг, добор участников),
+    не чаще чем раз в growth_message_cooldown_hours.
+    """
+    if not await can_send_growth_message(session, chat_id):
+        return
+    needed = await get_needed_participants_for_next_rank(session, chat_id)
+    if not needed or needed.total_chats == 0:
+        return
+    bot_info = await bot.get_me()
+    if needed.needed_count > 0:
+        text = (
+            f"🔥 Ваш чат сейчас <b>#{needed.current_position}</b> в рейтинге.\n\n"
+            f"До следующего места не хватает {needed.needed_count} участников."
+        )
+        if needed.next_competitor_title:
+            text += f"\n\nЕщё {needed.needed_count} человек — и обгоните <b>{needed.next_competitor_title}</b>."
+    else:
+        text = f"🔥 Ваш чат сейчас <b>#{needed.current_position}</b> в рейтинге.\n\nПусть тест пройдут новые участники — подниметесь выше."
     try:
         await bot.send_message(
             chat_id,
-            f"🎧 {comment.capitalize()}.\n\nПройдите тест, чтобы понять, кто это 👇",
-            reply_markup=get_chat_test_keyboard(bot_username, chat_id),
+            text,
+            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+            parse_mode="HTML",
         )
+        await mark_growth_message_sent(session, chat_id)
     except Exception:
         pass
 
@@ -121,6 +143,7 @@ async def bot_added_to_chat(event: ChatMemberUpdated, session: AsyncSession):
             type=event.chat.type,
             added_by_user_id=user_id,
             owner_id=user_id,
+            owner_username=event.from_user.username,
         )
         session.add(chat)
     else:
@@ -128,6 +151,8 @@ async def bot_added_to_chat(event: ChatMemberUpdated, session: AsyncSession):
         chat.title = event.chat.title
         if not getattr(chat, "owner_id", None):
             chat.owner_id = user_id
+        if hasattr(chat, "owner_username"):
+            chat.owner_username = event.from_user.username or chat.owner_username
 
     result = await session.execute(
         select(ChatMember).where(
@@ -282,43 +307,132 @@ async def start_prediction_from_chat(callback: CallbackQuery, session: AsyncSess
     await callback.answer("🔮 Функция в разработке", show_alert=True)
 
 
+def _chat_only(message: Message) -> bool:
+    """Команда только для групп/супергрупп."""
+    return message.chat.type in ("group", "supergroup")
+
+
+@router.message(Command("chat_scan"))
+async def cmd_chat_scan(message: Message, session: AsyncSession):
+    """Музыкальный сканер чата: профиль, жанры, артисты, вайб. Только в группах."""
+    if not _chat_only(message):
+        await message.answer(
+            "Музыкальный сканер доступен только в групповых чатах. "
+            "Добавьте бота в чат и вызовите /chat_scan там."
+        )
+        return
+
+    chat_id = message.chat.id
+    bot_info = await message.bot.get_me()
+    min_participants = getattr(
+        settings, "min_participants_for_scan", 3
+    )
+
+    profile = await calculate_chat_profile(session, chat_id)
+    if not profile:
+        await message.answer(
+            "Недостаточно данных для музыкального сканирования чата.\n"
+            "Пусть тест пройдут ещё участники.",
+            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+        )
+        return
+
+    comment = generate_chat_comment(profile)
+    lines = [
+        "🎧 <b>Музыкальный сканер чата</b>",
+        "",
+        "<b>Профиль чата:</b>",
+        profile.profile_name,
+        "",
+        "<b>Жанры чата:</b>",
+    ]
+    for name, pct in profile.genre_stats[:8]:
+        lines.append(f"{pct}% {name}")
+    if profile.top_artists:
+        lines.append("")
+        lines.append("<b>Любимые артисты:</b>")
+        lines.append(", ".join(profile.top_artists[:8]))
+    lines.append("")
+    lines.append("<b>Общий вайб:</b>")
+    lines.append(profile.vibe_text)
+    lines.append("")
+    lines.append(f"<i>Комментарий бота: {comment}</i>")
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
 @router.message(Command("chat_rating"))
 async def cmd_chat_rating(message: Message, session: AsyncSession):
-    """Рейтинг чата: топ участников, жанры чата, позиция в глобальном рейтинге."""
-    chat_id = message.chat.id
-    if message.chat.type == "private":
+    """Рейтинг чата: название, позиция, рейтинг, добор участников, комментарий."""
+    if not _chat_only(message):
         await message.answer(
-            "Эта команда работает только в групповых чатах. Добавьте бота в чат и напишите /chat_rating там."
+            "Эта команда работает только в групповых чатах. "
+            "Добавьте бота в чат и напишите /chat_rating там."
         )
+        return
+
+    chat_id = message.chat.id
+    chat = await session.get(Chat, chat_id)
+    if not chat:
+        await message.answer("Чат не найден. Сначала добавьте бота в чат.")
         return
 
     ranking = await get_chat_member_ranking(session, chat_id)
     if not ranking:
         await message.answer(
-            "Пока никто не прошёл тест в этом чате. Пройдите тест — и появится рейтинг!"
+            "Пока никто не прошёл тест в этом чате. Пройдите тест — и появится рейтинг!",
+            reply_markup=get_chat_test_keyboard((await message.bot.get_me()).username, chat_id),
         )
         return
 
-    await update_chat_rating(session, chat_id)
-    genre_stats = await get_chat_genre_stats(session, chat_id)
-    position = await get_chat_position(session, chat_id)
-    comment = get_chat_position_comment()
+    await calculate_chat_rating(session, chat_id)
+    rank = await get_chat_rank(session, chat_id)
+    needed = await get_needed_participants_for_next_rank(session, chat_id)
+    participants_count = len(ranking)
+    title = (chat.title or "Чат")[:50]
+    rating_val = chat.rating or 0
 
-    lines = ["🏆 <b>Музыкальный топ чата</b>\n"]
-    for i, (u, p, score) in enumerate(ranking[:10], 1):
-        comm = get_top_comment(i) if i <= 3 else ""
-        lines.append(f"{i}. {u.display_name} — вкус {score} {comm}")
+    lines = [
+        "🏆 <b>Рейтинг чата</b>",
+        "",
+        f"<b>Название:</b> {title}",
+    ]
+    if rank:
+        pos, total = rank
+        lines.append(f"<b>Позиция:</b> #{pos} из {total}")
+    lines.append(f"<b>Рейтинг:</b> {rating_val:.0f} / 100")
+    lines.append(f"<b>Прошли тест:</b> {participants_count} участников")
     lines.append("")
+    if needed and needed.needed_count > 0:
+        lines.append("Чтобы подняться выше, нужно чтобы тест прошли ещё "
+                     f"{needed.needed_count} человек.")
+        if needed.next_competitor_title:
+            lines.append(f"Ближайший сосед: {needed.next_competitor_title}")
+    else:
+        lines.append("Чтобы подняться выше — пусть тест пройдут новые участники.")
+    lines.append("")
+    lines.append(f"<i>Комментарий: {get_growth_comment()}</i>")
 
-    if genre_stats:
-        lines.append("🎸 <b>Жанры чата:</b>")
-        for name, pct in genre_stats[:8]:
-            lines.append(f"  {pct}% {name}")
-        lines.append("")
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
-    if position:
-        pos, total = position
-        lines.append(f"🌍 Ваш чат сейчас <b>#{pos}</b> из {total}")
-        lines.append(f"<i>{comment}</i>")
 
+@router.message(Command("top_chats"))
+async def cmd_top_chats(message: Message, session: AsyncSession):
+    """Глобальный топ музыкальных чатов (топ-10)."""
+    from app.rating import get_global_chat_ranking
+    ranking = await get_global_chat_ranking(session, limit=10)
+    if not ranking:
+        await message.answer(
+            "Пока нет чатов в рейтинге. Добавьте бота в чат и пройдите тест!"
+        )
+        return
+    lines = ["🌍 <b>Топ музыкальных чатов</b>", ""]
+    for i, (c, score) in enumerate(ranking, 1):
+        title = (c.title or f"Чат {c.id}")[:40]
+        owner = ""
+        if getattr(c, "owner_username", None):
+            owner = f"\n   владелец: @{c.owner_username}"
+        elif c.added_by and c.added_by.username:
+            owner = f"\n   владелец: @{c.added_by.username}"
+        lines.append(f"{i}. {title} — {score:.0f}{owner}")
     await message.answer("\n".join(lines), parse_mode="HTML")

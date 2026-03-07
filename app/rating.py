@@ -13,17 +13,38 @@ from app.models import (
 )
 
 
+def profile_completeness(profile: MusicProfile) -> float:
+    """
+    Полнота прохождения квиза: доля заполненных полей (0..1).
+    Жанры и артисты считаются независимо от «крутости» — все жанры равны.
+    """
+    filled = 0
+    total = 4  # genres, artists, mood, listening_time
+    if profile.genres and len(profile.genres) > 0:
+        filled += 1
+    if profile.artists and len(profile.artists) > 0:
+        filled += 1
+    if profile.mood:
+        filled += 1
+    if getattr(profile, "listening_time", None):
+        filled += 1
+    return filled / total
+
+
 def compute_user_taste_score(profile: MusicProfile) -> int:
     """
     Считает «вкус» пользователя 0–100 для отображения в рейтинге чата.
-    Учитывает редкость, разнообразие жанров и артистов.
+    Без предвзятости к жанрам: только полнота квиза и разнообразие (число жанров/артистов).
+    Редкость (rarity_score) не используется — techno, pop, indie и т.д. равноправны.
     """
-    base = 50
-    rarity_bonus = int(profile.rarity_score * 25)
-    genre_bonus = min(len(profile.genres or []), 3) * 5
-    artist_bonus = min(len(profile.artists or []), 5) * 2
-    score = base + rarity_bonus + genre_bonus + artist_bonus
-    return min(100, max(0, score))
+    completeness = profile_completeness(profile)
+    n_genres = len(profile.genres or [])
+    n_artists = len(profile.artists or [])
+    # Разнообразие без штрафа за «массовые» жанры: просто объём данных
+    diversity = min(n_genres / 4, 1.0) * 25 + min(n_artists / 10, 1.0) * 25  # макс 50
+    completeness_bonus = completeness * 50  # макс 50
+    score = completeness_bonus + diversity
+    return min(100, max(0, int(score)))
 
 
 async def get_chat_member_ranking(

@@ -24,10 +24,10 @@ from app.services.profile_card import (
 from app.services.matching import calculate_rarity_score, recalculate_user_matches
 from app.rating import (
     compute_user_taste_score,
-    update_chat_rating,
     get_chat_member_ranking,
     get_user_rank_in_chat,
 )
+from app.chat_rating import calculate_chat_rating
 from app.utils.humor import get_top_comment
 import random
 
@@ -235,7 +235,7 @@ async def select_mood_and_finish(
 
     await recalculate_user_matches(session, user_id)
     if chat_id:
-        await update_chat_rating(session, chat_id)
+        await calculate_chat_rating(session, chat_id)
         from app.handlers.chat_mode import ensure_chat_member_completed
         await ensure_chat_member_completed(session, chat_id, user_id)
 
