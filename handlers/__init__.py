@@ -5,7 +5,7 @@ from . import start, quiz, chat
 
 def setup_routers() -> Router:
     root = Router()
-    root.include_router(start.router, name="start")
-    root.include_router(quiz.router, name="quiz")
-    root.include_router(chat.router, name="chat")
+    root.include_router(start.router)
+    root.include_router(quiz.router)
+    root.include_router(chat.router)
     return root
