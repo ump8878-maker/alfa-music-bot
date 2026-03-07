@@ -270,6 +270,18 @@ async def select_mood_and_finish(
             comment = get_top_comment(my_rank)
             analytics_text += f"\n\n🏆 Ваше место в чате: <b>{my_rank}</b>. {comment.capitalize()}"
 
+        # Рейтинг чата: позиция в глобальном топе и добор участников
+        from app.chat_rating import get_chat_rank, get_needed_participants_for_next_rank
+        rank = await get_chat_rank(session, chat_id)
+        needed = await get_needed_participants_for_next_rank(session, chat_id)
+        if rank:
+            pos, total = rank
+            analytics_text += f"\n\n📊 <b>Рейтинг чата:</b> #{pos} из {total}"
+        if needed and needed.needed_count > 0:
+            analytics_text += f"\nЧтобы подняться выше — пусть тест пройдут ещё <b>{needed.needed_count}</b> человек."
+            if needed.next_competitor_title:
+                analytics_text += f"\nБлижайший сосед: {needed.next_competitor_title}"
+
     try:
         card_buffer = generate_profile_card(profile, username)
         card_file = BufferedInputFile(card_buffer.read(), filename="profile.png")

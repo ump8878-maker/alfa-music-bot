@@ -17,157 +17,167 @@ GENRES = [
     {"id": "other", "name": "Другое", "emoji": "✏️"},
 ]
 
-# Расширенные списки артистов по жанрам (актуальные 2024-2026)
+# Списки артистов по жанрам.
+# electronic: DJ Mag Top 100 2024 + Beatport 2025. Остальные: Яндекс Музыка итоги 2024 + TopHit/радио/YouTube РФ.
 POPULAR_ARTISTS = {
     "pop": [
-        # Международные
+        # Яндекс Музыка / чарты РФ 2024
+        "MONA", "Zivert", "Ёлка", "Полина Гагарина", "ANNA ASTI",
+        "Artik & Asti", "Мари Краймбрери", "Дима Билан", "Клава Кока",
+        "Люся Чеботина", "Мот", "Ваня Дмитриенко", "5утра",
+        # Международный поп
         "Билли Айлиш", "The Weeknd", "Дуа Липа", "Тейлор Свифт",
         "Ариана Гранде", "Эд Ширан", "Гарри Стайлс", "Оливия Родриго",
-        "Дожа Кэт", "Сабрина Карпентер", "Тейт МакРэй", "Gracie Abrams",
-        "Холзи", "Лана Дель Рей", "SZA", "Рианна", "Бейонсе",
-        "Чарли XCX", "Troye Sivan", "Рене Рапп", "Chappell Roan",
-        # Русские поп
-        "Zivert", "Мот", "Ёлка", "Полина Гагарина", "ANNA ASTI",
-        "Клава Кока", "Люся Чеботина", "Artik & Asti",
+        "Сабрина Карпентер", "Troye Sivan", "Chappell Roan", "SZA", "Рианна",
     ],
     "rock": [
-        # Классика и современность
-        "Arctic Monkeys", "Radiohead", "Muse", "The Killers",
-        "Imagine Dragons", "Twenty One Pilots", "Måneskin", "Royal Blood",
-        "Nothing But Thieves", "Bring Me The Horizon", "Greta Van Fleet",
-        "The Strokes", "Foo Fighters", "Green Day", "Nirvana",
-        "Queen", "Led Zeppelin", "Pink Floyd", "The Beatles",
-        # Русский рок
+        # Яндекс Музыка / чарты РФ 2024
+        "Комната культуры", "Женя Трофимов", "Моя Мишель",
         "Кино", "ДДТ", "Сплин", "Би-2", "Мумий Тролль",
         "Король и Шут", "Земфира", "Звери", "Агата Кристи",
-        "Пикник", "Кипелов", "Ария", "Louna", "Порнофильмы",
+        "Пикник", "Louna", "Порнофильмы", "Дайте танк (!)",
+        # Международный рок
+        "Arctic Monkeys", "Radiohead", "Muse", "The Killers",
+        "Imagine Dragons", "Twenty One Pilots", "Måneskin", "Foo Fighters",
+        "Queen", "Pink Floyd", "The Beatles", "Nirvana",
     ],
     "hiphop": [
-        # Русский рэп (актуальный)
+        # Яндекс Музыка / чарты РФ 2024
+        "MORGENSHTERN", "Баста", "ЛСП", "Тимати", "Macan",
+        "Bushido Zho", "Jakone", "Kiliana", "Макс Корж", "Элджей",
         "Oxxxymiron", "Скриптонит", "Три дня дождя", "Кизару",
-        "Платина", "MAYOT", "FRIENDLY THUG 52 NGG", "Bushido Zho",
-        "SEEMEE", "Токсис", "Лёша Свик", "Джизус", "Big Baby Tape",
-        "Slava Marlow", "MORGENSHTERN", "Тима Белорусских",
-        "ЛСП", "Pharaoh", "Boulevard Depo", "GONE.Fludd",
-        "Noize MC", "Хаски", "ATL", "Feduk", "Элджей",
+        "Платина", "MAYOT", "SEEMEE", "Big Baby Tape", "Slava Marlow",
+        "Тима Белорусских", "Pharaoh", "Noize MC", "Хаски", "Miyagi", "Andy Panda",
         # Международный
-        "Кендрик Ламар", "Дрейк", "Travis Scott", "21 Savage",
-        "Playboi Carti", "Future", "Metro Boomin", "J. Cole",
-        "Kanye West", "Tyler, The Creator", "A$AP Rocky",
+        "Кендрик Ламар", "Дрейк", "Travis Scott", "Future", "J. Cole",
+        "Kanye West", "Tyler, The Creator", "Metro Boomin",
     ],
     "indie": [
-        "The 1975", "Tame Impala", "Mac DeMarco", "Cigarettes After Sex",
-        "The Neighbourhood", "MGMT", "Glass Animals", "Wallows",
-        "Clairo", "beabadoobee", "Japanese Breakfast", "boygenius",
-        "Phoebe Bridgers", "Mitski", "Alex G", "Men I Trust",
-        "Khruangbin", "Unknown Mortal Orchestra", "King Krule",
-        # Русский инди
+        # Яндекс Музыка / чарты РФ 2024
+        "Монеточка", "Элли на маковом поле", "BEARWOLF",
         "Дайте танк (!)", "Сансара", "Пасош", "Аигел", "Комсомольск",
-        "Shortparis", "Sonic Death", "Ssshhhiiittt!", "Утро в тебе",
+        "Shortparis", "Ssshhhiiittt!", "Утро в тебе", "Мукка",
+        # Международный инди
+        "The 1975", "Tame Impala", "Mac DeMarco", "Cigarettes After Sex",
+        "The Neighbourhood", "MGMT", "Glass Animals", "Clairo", "beabadoobee",
+        "Phoebe Bridgers", "Mitski", "boygenius", "Men I Trust", "Khruangbin",
     ],
+    # Источники: DJ Mag Top 100 DJs 2024 + Beatport Top Artists by Genre 2025
     "electronic": [
-        # DJ Mag Top 100 2025 - EDM/Big Room
-        "David Guetta", "Martin Garrix", "Alok", "Dimitri Vegas & Like Mike",
-        "Timmy Trumpet", "Afrojack", "Hardwell", "Tiësto",
-        "Steve Aoki", "Don Diablo", "W&W", "Nicky Romero",
-        "Alan Walker", "R3hab", "Marshmello", "Zedd",
-        "Swedish House Mafia", "Alesso", "The Chainsmokers", "KSHMR",
-        # House / Tech House
-        "FISHER", "Calvin Harris", "Vintage Culture", "Black Coffee",
-        "Oliver Heldens", "Dom Dolla", "John Summit", "James Hype",
-        "Joel Corry", "Mochakk", "Chris Lake", "Claptone",
-        "Keinemusik", "Solomun", "Jamie Jones", "MEDUZA",
-        # Techno
-        "Charlotte de Witte", "Amelie Lens", "Boris Brejcha", "Reinier Zonneveld",
-        "Indira Paganotto", "Sara Landry", "I Hate Models", "Deborah De Luca",
-        "Carl Cox", "Nico Moreno", "Lilly Palmer",
-        # Melodic / Progressive
-        "Anyma", "Eric Prydz", "Peggy Gou", "Fred again..",
-        "ARTBAT", "Miss Monique", "Nora En Pure", "Kölsch",
-        # Trance
-        "Armin Van Buuren", "Paul van Dyk", "Above & Beyond",
-        "Vini Vici", "ATB", "Lost Frequencies", "Ferry Corsten",
-        # Bass / Dubstep
-        "Skrillex", "Deadmau5", "Flume", "ODESZA",
-        # Классики
-        "Daft Punk", "Disclosure", "Justice", "Gesaffelstein",
-        # Русская электроника
+        # DJ Mag Top 100 2024 (1–100)
+        "Martin Garrix", "David Guetta", "Dimitri Vegas & Like Mike", "Alok",
+        "Timmy Trumpet", "Armin Van Buuren", "Afrojack", "FISHER",
+        "Vintage Culture", "Peggy Gou", "Hardwell", "Steve Aoki",
+        "Alan Walker", "KSHMR", "Don Diablo", "Charlotte de Witte",
+        "Anyma", "R3hab", "Skrillex", "Lost Frequencies",
+        "W&W", "Calvin Harris", "Tiësto", "Black Coffee",
+        "Nicky Romero", "Reinier Zonneveld", "Vini Vici", "Fred again..",
+        "Oliver Heldens", "Jamie Jones", "Carl Cox", "Claptone",
+        "DJ Snake", "Marshmello", "Keinemusik", "Joel Corry",
+        "Paul van Dyk", "Quintino", "Swedish House Mafia", "Fedde Le Grand",
+        "Amelie Lens", "The Chainsmokers", "Alesso", "Bassjackers",
+        "GORDO", "Eric Prydz", "ATB", "KAAZE",
+        "Indira Paganotto", "Nervo", "Mariana Bo", "VINAI",
+        "Above & Beyond", "Zedd", "Boris Brejcha", "Kura",
+        "James Hype", "Deborah De Luca", "Tujamo", "Korolova",
+        "Mochakk", "Dubdogz", "Julian Jordan", "Burak Yeter",
+        "Nora En Pure", "Dom Dolla", "Deadmau5", "The Martinez Brothers",
+        "Maddix", "John Summit", "Lucas & Steve", "Danny Avila",
+        "Mike Williams", "22Bullets", "Sara Landry", "DubVision",
+        "Cat Dealers", "Kölsch", "Liu", "Ferry Corsten",
+        "Plastik Funk", "Jax Jones", "Le Twins", "Tungevaag",
+        "Aryue", "REZZ", "WUKONG", "Solomun",
+        "Cuebrick", "Marnik", "Mau P", "KAKA",
+        "Pink Panda", "B Jones", "Naeleck", "Rave Republic",
+        "Topic", "Giuseppe Ottaviani", "Faustix", "MEDUZA",
+        # Beatport 2025 — Tech House
+        "Max Styler", "Chris Lake", "SIDEPIECE", "Prospa",
+        "Chris Lorenzo", "Cloonee", "CID", "Toman", "Ragie Ban",
+        # Beatport 2025 — Techno
+        "Adam Beyer", "Space 92", "HNTR", "Bart Skils",
+        "Marie Vaunt", "METODI", "YellowHeads", "Mha Iri", "NoNameLeft",
+        # Beatport 2025 — Melodic House & Techno
+        "GENESI", "RÜFÜS DU SOL", "ARTBAT", "Argy",
+        "Layton Giordani", "Cassian", "Massano",
+        # Дополнительно
+        "Miss Monique", "Flume", "ODESZA", "Daft Punk", "Disclosure", "Justice",
+        "Gesaffelstein", "I Hate Models", "Nico Moreno",
         "Little Big", "IC3PEAK", "Cream Soda", "RSAC",
     ],
     "rnb": [
-        "Frank Ocean", "Daniel Caesar", "Steve Lacy", "Omar Apollo",
-        "Brent Faiyaz", "Jorja Smith", "H.E.R.", "Khalid",
-        "Jhené Aiko", "Summer Walker", "Kehlani", "Victoria Monét",
-        "Cleo Sol", "Snoh Aalegra", "Giveon", "Lucky Daye",
-        "Tyla", "Tems", "Ayra Starr", "Rema",
-        # Русский R&B
-        "Jony", "Andro", "Миша Марвин", "Мари Краймбрери",
-        "Hammali & Navai", "Rauf & Faik",
+        # Яндекс Музыка / чарты РФ 2024
+        "Мари Краймбрери", "Jony", "Hammali & Navai", "Rauf & Faik",
+        "Владимир Пресняков", "Леонид Агутин", "МакSим", "Andro", "Миша Марвин",
+        # Международный R&B
+        "Frank Ocean", "Daniel Caesar", "Brent Faiyaz", "Summer Walker",
+        "Jhené Aiko", "Giveon", "The Weeknd", "SZA", "Khalid",
+        "Jorja Smith", "H.E.R.", "Tyla", "Tems", "Victoria Monét",
     ],
     "metal": [
+        # РФ
+        "Ария", "Кипелов", "Louna", "Amatory", "Slot", "Эпидемия", "Catharsis",
+        # Международный
         "Metallica", "Slipknot", "Rammstein", "System of a Down",
-        "Gojira", "Mastodon", "Deftones", "Tool",
-        "Avenged Sevenfold", "Ghost", "Spiritbox", "Polyphia",
-        "Sleep Token", "Bad Omens", "Knocked Loose", "Lorna Shore",
-        "Architects", "Parkway Drive", "Jinjer", "Electric Callboy",
-        # Русский метал
-        "Кипелов", "Ария", "Эпидемия", "Catharsis", "Slot",
+        "Gojira", "Deftones", "Tool", "Ghost", "Spiritbox",
+        "Sleep Token", "Bad Omens", "Architects", "Electric Callboy",
     ],
     "jazz": [
-        "Kamasi Washington", "Robert Glasper", "Norah Jones",
-        "Gregory Porter", "Esperanza Spalding", "Snarky Puppy",
+        # РФ / кроссоверы
+        "Пелагея", "Игорь Бутман", "Олег Аксамит", "Norah Jones", "Diana Krall",
+        # Классика и современный джаз
+        "Kamasi Washington", "Robert Glasper", "Gregory Porter", "Snarky Puppy",
         "Jacob Collier", "Alfa Mist", "Yussef Dayes", "Tom Misch",
-        "Cory Henry", "Thundercat", "BadBadNotGood",
-        "Miles Davis", "John Coltrane", "Chet Baker",
-        "Herbie Hancock", "Diana Krall", "GoGo Penguin",
+        "Miles Davis", "John Coltrane", "Chet Baker", "Herbie Hancock", "GoGo Penguin",
     ],
     "punk": [
+        # РФ (Яндекс Музыка / чарты)
+        "Король и Шут", "Ленинград", "Гражданская Оборона", "Порнофильмы",
+        "Distemper", "Тараканы!", "Наив", "Louna", "Психея", "Пилот",
+        # Международный
         "Green Day", "Blink-182", "Sum 41", "My Chemical Romance",
-        "Fall Out Boy", "Paramore", "All Time Low", "The Offspring",
-        "Bad Religion", "NOFX", "Rancid", "Rise Against",
-        "Turnstile", "PUP", "IDLES", "Amyl and the Sniffers",
-        # Русский панк
-        "Порнофильмы", "Distemper", "Тараканы!", "Наив",
-        "Louna", "Слот", "Lumen", "Психея",
+        "Fall Out Boy", "Paramore", "The Offspring", "Bad Religion", "NOFX", "Rancid",
     ],
     "folk": [
-        "Mumford & Sons", "The Lumineers", "Of Monsters and Men",
-        "Fleet Foxes", "Bon Iver", "Iron & Wine", "Hozier",
-        "Vance Joy", "Lord Huron", "First Aid Kit",
-        "Novo Amor", "Gregory Alan Isakov", "José González",
-        # Русский фолк
+        # РФ
         "Мельница", "Аквариум", "Пелагея", "Theodor Bastard",
-        "Отава Ё", "Калинов Мост", "Сергей Бабкин",
+        "Отава Ё", "Калинов Мост", "Сергей Бабкин", "Тол Мириам", "Иван Купала",
+        # Международный
+        "Mumford & Sons", "The Lumineers", "Of Monsters and Men",
+        "Fleet Foxes", "Bon Iver", "Iron & Wine", "Hozier", "First Aid Kit",
+        "Gregory Alan Isakov", "José González",
     ],
     "soul": [
+        "Aretha Franklin", "Marvin Gaye", "Stevie Wonder", "Otis Redding",
         "Leon Bridges", "Anderson .Paak", "John Legend", "Alicia Keys",
         "Bruno Mars", "Silk Sonic", "Erykah Badu", "D'Angelo",
-        "Amy Winehouse", "Adele", "Sam Smith", "Lianne La Havas",
-        "Michael Kiwanuka", "Celeste", "Rag'n'Bone Man",
+        "Amy Winehouse", "Adele", "Sam Smith", "Michael Kiwanuka", "Celeste",
     ],
     "classical": [
+        # Классика + саундтреки / неоклассика
+        "Бах", "Моцарт", "Бетховен", "Чайковский", "Рахманинов", "Шопен",
         "Ludovico Einaudi", "Hans Zimmer", "Max Richter", "Yann Tiersen",
         "Ólafur Arnalds", "Nils Frahm", "Joep Beving", "Kirill Richter",
-        "Lang Lang", "Daniil Trifonov", "Валерий Гергиев",
-        "Денис Мацуев", "Евгений Кисин",
+        "Lang Lang", "Daniil Trifonov", "Валерий Гергиев", "Денис Мацуев", "Евгений Кисин",
     ],
 }
 
-# Все русские артисты отдельно для большего присутствия
+# Все русские артисты отдельно для большего присутствия (Яндекс Музыка / чарты РФ)
 POPULAR_ARTISTS_RU = [
     # Рэп/Хип-хоп
+    "MORGENSHTERN", "Баста", "ЛСП", "Тимати", "Macan", "Bushido Zho",
     "Oxxxymiron", "Скриптонит", "Три дня дождя", "Кизару", "Платина",
-    "MAYOT", "FRIENDLY THUG 52 NGG", "SEEMEE", "Токсис", "Джизус",
-    "Big Baby Tape", "Slava Marlow", "Тима Белорусских", "ЛСП",
-    "Pharaoh", "Boulevard Depo", "GONE.Fludd", "Noize MC", "Хаски",
-    "ATL", "Feduk", "Элджей", "Баста", "Miyagi", "Andy Panda",
-    "Макс Корж", "Мукка", "Монеточка", "Cream Soda",
+    "MAYOT", "SEEMEE", "Big Baby Tape", "Slava Marlow", "Тима Белорусских",
+    "Pharaoh", "Noize MC", "Хаски", "Элджей", "Miyagi", "Andy Panda",
+    "Макс Корж", "Мукка", "Jakone", "Kiliana", "Cream Soda",
     # Рок
+    "Комната культуры", "Женя Трофимов", "Моя Мишель",
     "Кино", "Сплин", "Би-2", "Земфира", "Мумий Тролль",
-    "Король и Шут", "Звери", "Порнофильмы", "Дайте танк (!)",
-    # Поп/Другое
-    "Zivert", "ANNA ASTI", "Люся Чеботина", "Jony",
-    "Мари Краймбрери", "Hammali & Navai", "Rauf & Faik",
+    "Король и Шут", "Звери", "Порнофильмы", "Дайте танк (!)", "Louna",
+    # Поп/Инди
+    "MONA", "Zivert", "Ёлка", "Полина Гагарина", "ANNA ASTI",
+    "Artik & Asti", "Мари Краймбрери", "Клава Кока", "Люся Чеботина",
+    "Монеточка", "Элли на маковом поле", "BEARWOLF",
+    "Jony", "Hammali & Navai", "Rauf & Faik",
     # Инди/Альтернатива  
     "Ssshhhiiittt!", "Комсомольск", "Пасош", "Аигел", "Shortparis",
     "IC3PEAK", "Little Big",

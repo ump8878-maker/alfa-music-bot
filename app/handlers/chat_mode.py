@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.models import User, Chat, ChatMember, MusicProfile, Match
-from app.keyboards import get_chat_map_keyboard, get_chat_test_keyboard
+from app.keyboards import get_chat_map_keyboard, get_chat_menu_keyboard
 from app.keyboards.inline import InlineKeyboardBuilder
 from app.services.matching import calculate_chat_matches
 from app.services.chat_map import generate_chat_map_text
@@ -81,7 +81,7 @@ async def post_quiz_result_to_chat(
     await bot.send_message(
         chat_id,
         text,
-        reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+        reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
         parse_mode="HTML",
     )
     # Мотивирующее сообщение о росте рейтинга (с cooldown)
@@ -112,7 +112,7 @@ async def try_send_growth_message(bot, session: AsyncSession, chat_id: int) -> N
         await bot.send_message(
             chat_id,
             text,
-            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+            reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
             parse_mode="HTML",
         )
         await mark_growth_message_sent(session, chat_id)
@@ -195,7 +195,7 @@ async def bot_added_to_chat(event: ChatMemberUpdated, session: AsyncSession):
         f"{profile_line}"
         f"📊 Участников: {completed}/{MIN_PARTICIPANTS}\n"
         f"{remaining_line}",
-        reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+        reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
         parse_mode="HTML",
     )
 
@@ -312,6 +312,132 @@ def _chat_only(message: Message) -> bool:
     return message.chat.type in ("group", "supergroup")
 
 
+async def _send_chat_scan_result(bot, chat_id: int, session: AsyncSession, reply_markup=None):
+    """Формирует и возвращает текст сканера чата."""
+    profile = await calculate_chat_profile(session, chat_id)
+    if not profile:
+        return None, reply_markup
+    comment = generate_chat_comment(profile)
+    lines = [
+        "🎧 <b>Музыкальный сканер чата</b>",
+        "",
+        "<b>Профиль чата:</b>",
+        profile.profile_name,
+        "",
+        "<b>Жанры чата:</b>",
+    ]
+    for name, pct in profile.genre_stats[:8]:
+        lines.append(f"{pct}% {name}")
+    if profile.top_artists:
+        lines.append("")
+        lines.append("<b>Любимые артисты:</b>")
+        lines.append(", ".join(profile.top_artists[:8]))
+    lines.append("")
+    lines.append("<b>Общий вайб:</b>")
+    lines.append(profile.vibe_text)
+    lines.append("")
+    lines.append(f"<i>Комментарий бота: {comment}</i>")
+    return "\n".join(lines), reply_markup
+
+
+async def _send_chat_rating_result(bot, chat_id: int, session: AsyncSession, reply_markup=None):
+    """Формирует текст рейтинга чата."""
+    chat = await session.get(Chat, chat_id)
+    if not chat:
+        return None, reply_markup
+    ranking = await get_chat_member_ranking(session, chat_id)
+    if not ranking:
+        return None, reply_markup
+    await calculate_chat_rating(session, chat_id)
+    rank = await get_chat_rank(session, chat_id)
+    needed = await get_needed_participants_for_next_rank(session, chat_id)
+    participants_count = len(ranking)
+    title = (chat.title or "Чат")[:50]
+    rating_val = chat.rating or 0
+    lines = [
+        "🏆 <b>Рейтинг чата</b>",
+        "",
+        f"<b>Название:</b> {title}",
+    ]
+    if rank:
+        pos, total = rank
+        lines.append(f"<b>Позиция:</b> #{pos} из {total}")
+    lines.append(f"<b>Рейтинг:</b> {rating_val:.0f} / 100")
+    lines.append(f"<b>Прошли тест:</b> {participants_count} участников")
+    lines.append("")
+    if needed and needed.needed_count > 0:
+        lines.append("Чтобы подняться выше, нужно чтобы тест прошли ещё "
+                     f"{needed.needed_count} человек.")
+        if needed.next_competitor_title:
+            lines.append(f"Ближайший сосед: {needed.next_competitor_title}")
+    else:
+        lines.append("Чтобы подняться выше — пусть тест пройдут новые участники.")
+    lines.append("")
+    lines.append(f"<i>Комментарий: {get_growth_comment()}</i>")
+    return "\n".join(lines), reply_markup
+
+
+@router.callback_query(F.data.startswith("chat_menu:scan:"))
+async def cb_chat_menu_scan(callback: CallbackQuery, session: AsyncSession):
+    """Кнопка «Сканер чата» в меню."""
+    chat_id = int(callback.data.split(":")[-1])
+    bot_info = await callback.bot.get_me()
+    reply_markup = get_chat_menu_keyboard(bot_info.username, chat_id)
+    text, _ = await _send_chat_scan_result(callback.bot, chat_id, session, reply_markup)
+    if text:
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await callback.message.answer(
+            "Недостаточно данных для сканера. Пусть тест пройдут ещё участники.",
+            reply_markup=reply_markup,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("chat_menu:rating:"))
+async def cb_chat_menu_rating(callback: CallbackQuery, session: AsyncSession):
+    """Кнопка «Рейтинг чата» в меню."""
+    chat_id = int(callback.data.split(":")[-1])
+    bot_info = await callback.bot.get_me()
+    reply_markup = get_chat_menu_keyboard(bot_info.username, chat_id)
+    text, _ = await _send_chat_rating_result(callback.bot, chat_id, session, reply_markup)
+    if text:
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await callback.message.answer(
+            "Пока никто не прошёл тест в этом чате. Пройдите тест — и появится рейтинг!",
+            reply_markup=reply_markup,
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "chat_menu:top")
+async def cb_chat_menu_top(callback: CallbackQuery, session: AsyncSession):
+    """Кнопка «Топ чатов» в меню."""
+    from app.rating import get_global_chat_ranking
+    ranking = await get_global_chat_ranking(session, limit=10)
+    chat_id = callback.message.chat.id
+    bot_info = await callback.bot.get_me()
+    reply_markup = get_chat_menu_keyboard(bot_info.username, chat_id)
+    if not ranking:
+        await callback.message.answer(
+            "Пока нет чатов в рейтинге. Добавьте бота в чат и пройдите тест!",
+            reply_markup=reply_markup,
+        )
+    else:
+        lines = ["🌍 <b>Топ музыкальных чатов</b>", ""]
+        for i, (c, score) in enumerate(ranking, 1):
+            title = (c.title or f"Чат {c.id}")[:40]
+            owner = ""
+            if getattr(c, "owner_username", None):
+                owner = f"\n   владелец: @{c.owner_username}"
+            elif c.added_by and c.added_by.username:
+                owner = f"\n   владелец: @{c.added_by.username}"
+            lines.append(f"{i}. {title} — {score:.0f}{owner}")
+        await callback.message.answer("\n".join(lines), parse_mode="HTML", reply_markup=reply_markup)
+    await callback.answer()
+
+
 @router.message(Command("chat_scan"))
 async def cmd_chat_scan(message: Message, session: AsyncSession):
     """Музыкальный сканер чата: профиль, жанры, артисты, вайб. Только в группах."""
@@ -333,7 +459,7 @@ async def cmd_chat_scan(message: Message, session: AsyncSession):
         await message.answer(
             "Недостаточно данных для музыкального сканирования чата.\n"
             "Пусть тест пройдут ещё участники.",
-            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+            reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
         )
         return
 
@@ -381,7 +507,7 @@ async def cmd_chat_rating(message: Message, session: AsyncSession):
     if not ranking:
         await message.answer(
             "Пока никто не прошёл тест в этом чате. Пройдите тест — и появится рейтинг!",
-            reply_markup=get_chat_test_keyboard((await message.bot.get_me()).username, chat_id),
+            reply_markup=get_chat_menu_keyboard((await message.bot.get_me()).username, chat_id),
         )
         return
 

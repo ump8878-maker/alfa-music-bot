@@ -12,8 +12,10 @@ from .inline import (
     get_battle_keyboard,
     get_prediction_keyboard,
     get_chat_map_keyboard,
+    get_chat_menu_keyboard,
     get_paywall_keyboard,
     get_chat_test_keyboard,
+    get_chat_start_keyboard,
 )
 from .data import GENRES, POPULAR_ARTISTS, MOODS, ERAS, WHEN_LISTEN
 
@@ -31,8 +33,10 @@ __all__ = [
     "get_battle_keyboard",
     "get_prediction_keyboard",
     "get_chat_map_keyboard",
+    "get_chat_menu_keyboard",
     "get_paywall_keyboard",
     "get_chat_test_keyboard",
+    "get_chat_start_keyboard",
     "GENRES",
     "POPULAR_ARTISTS",
     "MOODS",

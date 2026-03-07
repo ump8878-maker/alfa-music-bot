@@ -298,15 +298,23 @@ def get_prediction_keyboard(round_id: int, options: List[str]) -> InlineKeyboard
     return builder.as_markup()
 
 
-def get_chat_start_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для первого сообщения в чате"""
+def get_chat_start_keyboard(bot_username: str, chat_id: int = 0) -> InlineKeyboardMarkup:
+    """Клавиатура для первого сообщения в чате: Пройти тест (с deep link из чата)."""
+    return get_chat_test_keyboard(bot_username, chat_id)
+
+
+def get_chat_menu_keyboard(bot_username: str, chat_id: int) -> InlineKeyboardMarkup:
+    """Меню чата: Пройти тест, Сканер, Рейтинг, Топ чатов."""
     builder = InlineKeyboardBuilder()
-    
+    start_param = f"from_chat_{chat_id}" if chat_id else "from_chat"
     builder.button(
         text="🎵 Пройти тест",
-        url="https://t.me/{bot_username}?start=from_chat"
+        url=f"https://t.me/{bot_username}?start={start_param}",
     )
-    
+    builder.button(text="📊 Сканер чата", callback_data=f"chat_menu:scan:{chat_id}")
+    builder.button(text="🏆 Рейтинг чата", callback_data=f"chat_menu:rating:{chat_id}")
+    builder.button(text="🌍 Топ чатов", callback_data="chat_menu:top")
+    builder.adjust(1)
     return builder.as_markup()
 
 
