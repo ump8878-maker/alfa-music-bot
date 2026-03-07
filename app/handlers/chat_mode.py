@@ -36,7 +36,7 @@ MIN_PARTICIPANTS = 3
 async def ensure_chat_member_completed(
     session: AsyncSession, chat_id: int, user_id: int
 ) -> None:
-    """Отмечает участника чата как прошедшего тест."""
+    """Отмечает участника чата как прошедшего тест. Создаёт ChatMember, если пришёл из чата по ссылке."""
     result = await session.execute(
         select(ChatMember).where(
             ChatMember.chat_id == chat_id,
@@ -44,9 +44,11 @@ async def ensure_chat_member_completed(
         )
     )
     member = result.scalar_one_or_none()
-    if member:
-        member.has_completed_test = True
-        await session.commit()
+    if not member:
+        member = ChatMember(chat_id=chat_id, user_id=user_id)
+        session.add(member)
+    member.has_completed_test = True
+    await session.commit()
 
 
 async def post_quiz_result_to_chat(
@@ -484,7 +486,11 @@ async def cmd_chat_scan(message: Message, session: AsyncSession):
     lines.append("")
     lines.append(f"<i>Комментарий бота: {comment}</i>")
 
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    await message.answer(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
+    )
 
 
 @router.message(Command("chat_rating"))
@@ -539,7 +545,11 @@ async def cmd_chat_rating(message: Message, session: AsyncSession):
     lines.append("")
     lines.append(f"<i>Комментарий: {get_growth_comment()}</i>")
 
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    await message.answer(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=get_chat_menu_keyboard((await message.bot.get_me()).username, chat_id),
+    )
 
 
 @router.message(Command("top_chats"))
@@ -561,4 +571,7 @@ async def cmd_top_chats(message: Message, session: AsyncSession):
         elif c.added_by and c.added_by.username:
             owner = f"\n   владелец: @{c.added_by.username}"
         lines.append(f"{i}. {title} — {score:.0f}{owner}")
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    reply_markup = None
+    if message.chat.type in ("group", "supergroup"):
+        reply_markup = get_chat_menu_keyboard((await message.bot.get_me()).username, message.chat.id)
+    await message.answer("\n".join(lines), parse_mode="HTML", reply_markup=reply_markup)
