@@ -15,9 +15,20 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
-    """Обработка команды /start"""
+    """Обработка команды /start (в т.ч. from_chat_123 из группового чата)."""
     user_id = message.from_user.id
-    
+    # Deep link из чата: ?start=from_chat_123 — сохраняем chat_id для публикации результата
+    from_chat_id = None
+    if message.text and " " in message.text:
+        args = message.text.split(maxsplit=1)
+        if len(args) > 1 and args[1].startswith("from_chat_"):
+            try:
+                from_chat_id = int(args[1].replace("from_chat_", "").strip())
+            except ValueError:
+                pass
+    if from_chat_id:
+        await state.update_data(from_chat_id=from_chat_id)
+
     user = await session.get(User, user_id)
     if not user:
         user = User(
@@ -29,47 +40,54 @@ async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
         )
         session.add(user)
         await session.commit()
-    
+
     result = await session.execute(
         select(MusicProfile).where(MusicProfile.user_id == user_id)
     )
     profile = result.scalar_one_or_none()
-    
+
     if profile:
         profile_text = generate_profile_text(profile)
         await message.answer(
             f"👋 С возвращением, {message.from_user.first_name}!\n\n{profile_text}",
             reply_markup=get_profile_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     else:
-        await message.answer(
+        intro = (
             f"🎧 <b>Йо, {message.from_user.first_name}!</b>\n\n"
-            "Я — <b>Альфа</b>, бот который знает о музыке всё.\n\n"
-            "🎵 Пройди короткий тест и узнай:\n"
-            "├ Какой ты меломан на самом деле\n"
-            "├ Кто слушает то же самое\n"
-            "└ Насколько уникален твой вкус\n\n"
-            "⏱ <i>Займёт меньше минуты</i>",
+            "Я — <b>Альфа</b>, бот, который знает о музыке всё.\n\n"
+            "🎵 Пройди короткий тест (4 вопроса) и узнай:\n"
+            "├ свой музыкальный архетип\n"
+            "├ совпадения с друзьями и чатами\n"
+            "└ место в рейтинге\n\n"
+            "⏱ <i>Займёт меньше минуты</i>"
+        )
+        if from_chat_id:
+            intro += "\n\n📌 Ты пришёл из чата — после теста твой результат покажу там!"
+        await message.answer(
+            intro,
             reply_markup=get_start_keyboard(),
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
 
 
 @router.callback_query(F.data == "start_test")
 async def start_test(callback: CallbackQuery, state: FSMContext):
-    """Начало теста"""
+    """Начало теста (4 шага). Сохраняем from_chat_id из state, если есть."""
     from app.keyboards import get_genres_keyboard
-    
+    data = await state.get_data()
     await state.set_state(TasteTestStates.selecting_genres)
     await state.update_data(selected_genres=set())
-    
+    # Не затираем from_chat_id
+    if data.get("from_chat_id"):
+        await state.update_data(from_chat_id=data["from_chat_id"])
     await callback.message.edit_text(
-        "🎵 <b>Шаг 1/5: Жанры</b>\n\n"
+        "🎵 <b>Шаг 1/4: Жанры</b>\n\n"
         "Какую музыку слушаешь чаще всего?\n"
-        "Выбери до 3 жанров.",
+        "Выбери до 4 жанров (или «Свой вариант»).",
         reply_markup=get_genres_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -105,50 +123,91 @@ async def about_bot(callback: CallbackQuery):
 
 @router.message(Command("profile"))
 async def cmd_profile(message: Message, session: AsyncSession):
-    """Показать профиль пользователя"""
+    """Показать профиль: архетип, совпадения, место в рейтинге."""
     from aiogram.types import BufferedInputFile
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from app.services.card_generator import generate_profile_card
-    
+    from app.services.matching import calculate_match_score
+    from app.rating import get_chat_member_ranking, get_user_rank_in_chat
+    from app.models import ChatMember
+
     user_id = message.from_user.id
     bot_info = await message.bot.get_me()
-    
+
     result = await session.execute(
         select(MusicProfile).where(MusicProfile.user_id == user_id)
     )
     profile = result.scalar_one_or_none()
-    
-    if profile:
-        username = message.from_user.username
-        
-        try:
-            card_buffer = generate_profile_card(profile, username)
-            card_file = BufferedInputFile(card_buffer.read(), filename="profile.png")
-            
-            builder = InlineKeyboardBuilder()
-            builder.button(text="📤 Поделиться", switch_inline_query="")
-            builder.button(text="👥 Добавить в чат", url=f"https://t.me/{bot_info.username}?startgroup=true")
-            builder.button(text="🔄 Пройти заново", callback_data="restart_test")
-            builder.button(text="📊 Мои совпадения", callback_data="show_matches")
-            builder.adjust(2, 2)
-            
-            await message.answer_photo(
-                photo=card_file,
-                caption="🎵 <b>Твой музыкальный профиль</b>",
-                reply_markup=builder.as_markup(),
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            profile_text = generate_profile_text(profile)
-            await message.answer(
-                f"📊 <b>Твой музыкальный профиль</b>\n\n{profile_text}",
-                reply_markup=get_profile_keyboard(),
-                parse_mode="HTML"
-            )
-    else:
+
+    if not profile:
         await message.answer(
             "У тебя пока нет профиля. Пройди тест!",
-            reply_markup=get_start_keyboard()
+            reply_markup=get_start_keyboard(),
+        )
+        return
+
+    username = message.from_user.username
+    caption = "🎵 <b>Твой музыкальный профиль</b>\n\n"
+    caption += f"<b>Тип:</b> {profile.profile_type}\n\n"
+
+    # Совпадения (топ из любого чата)
+    memberships = await session.execute(
+        select(ChatMember.chat_id).where(ChatMember.user_id == user_id)
+    )
+    chat_ids = [r[0] for r in memberships.fetchall()]
+    seen = set()
+    match_lines = []
+    for cid in chat_ids[:3]:
+        ranking = await get_chat_member_ranking(session, cid)
+        for u, p, _ in ranking:
+            if u.id == user_id or u.id in seen:
+                continue
+            seen.add(u.id)
+            sc, _ = calculate_match_score(profile, p)
+            match_lines.append(f"{u.display_name} — {int(sc * 100)}%")
+            if len(match_lines) >= 5:
+                break
+        if len(match_lines) >= 5:
+            break
+    if match_lines:
+        caption += "<b>Совпадения:</b>\n" + "\n".join(match_lines) + "\n\n"
+    rank_line = ""
+    for cid in chat_ids[:1]:
+        r = await get_user_rank_in_chat(session, user_id, cid)
+        if r:
+            rank_line = f"<b>Место в рейтинге чата:</b> {r}"
+            break
+    if rank_line:
+        caption += rank_line + "\n\n"
+
+    try:
+        card_buffer = generate_profile_card(profile, username)
+        card_file = BufferedInputFile(card_buffer.read(), filename="profile.png")
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📤 Поделиться", switch_inline_query="")
+        builder.button(
+            text="👥 Добавить в чат",
+            url=f"https://t.me/{bot_info.username}?startgroup=true",
+        )
+        builder.button(text="🔄 Пройти заново", callback_data="restart_test")
+        builder.button(text="📊 Мои совпадения", callback_data="show_matches")
+        builder.adjust(2, 2)
+        await message.answer_photo(
+            photo=card_file,
+            caption=caption,
+            reply_markup=builder.as_markup(),
+            parse_mode="HTML",
+        )
+    except Exception:
+        profile_text = generate_profile_text(profile)
+        if match_lines:
+            profile_text += "\n\n<b>Совпадения:</b>\n" + "\n".join(match_lines)
+        if rank_line:
+            profile_text += "\n\n" + rank_line
+        await message.answer(
+            f"📊 <b>Твой музыкальный профиль</b>\n\n{profile_text}",
+            reply_markup=get_profile_keyboard(),
+            parse_mode="HTML",
         )
 
 
@@ -159,18 +218,14 @@ async def cmd_help(message: Message):
         "🎵 <b>Альфа — бот музыкальных вкусов</b>\n\n"
         "<b>Команды:</b>\n"
         "/start — начать или перезапустить\n"
-        "/profile — посмотреть свой профиль\n"
+        "/profile — архетип, совпадения, место в рейтинге\n"
         "/matches — посмотреть совпадения\n"
+        "/global_rating — глобальный рейтинг чатов\n"
         "/help — эта справка\n\n"
         "<b>В групповых чатах:</b>\n"
-        "Добавь бота в чат, и когда 3+ человек "
-        "пройдут тест — откроется карта вкусов чата!\n\n"
-        "<b>Что умеет бот:</b>\n"
-        "• Показывает музыкальные совпадения\n"
-        "• Проводит баттлы вкусов\n"
-        "• Запускает угадайки\n"
-        "• Рекомендует события",
-        parse_mode="HTML"
+        "/chat_rating — рейтинг чата, топ участников, жанры\n\n"
+        "Добавь бота в чат → пройдите тест → рейтинг и совпадения!",
+        parse_mode="HTML",
     )
 
 
@@ -248,53 +303,35 @@ async def add_to_chat(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.message(Command("global_rating"))
+async def cmd_global_rating(message: Message, session: AsyncSession):
+    """Глобальный рейтинг музыкальных чатов."""
+    from app.rating import get_global_chat_ranking
+
+    ranking = await get_global_chat_ranking(session, limit=15)
+    if not ranking:
+        await message.answer(
+            "Пока нет чатов в рейтинге. Добавьте бота в чат и пройдите тест!"
+        )
+        return
+    lines = ["🌍 <b>Глобальный рейтинг музыкальных чатов</b>\n"]
+    for i, (chat, score) in enumerate(ranking, 1):
+        title = (chat.title or f"Чат {chat.id}")[:40]
+        owner_str = ""
+        if getattr(chat, "owner", None) and chat.owner:
+            owner_str = f"\n   владелец: {chat.owner.mention}"
+        elif getattr(chat, "added_by", None) and chat.added_by:
+            owner_str = f"\n   владелец: {chat.added_by.mention}"
+        lines.append(f"{i}. {title} — {score:.0f}{owner_str}")
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
 @router.message(Command("stats"))
 async def cmd_stats(message: Message, session: AsyncSession):
-    """Статистика бота (только для админа)"""
-    from config import settings
-    
-    # Проверяем что это владелец бота (первый пользователь или из admin_ids)
-    user_id = message.from_user.id
-    
-    # Получаем статистику
-    users_count = await session.scalar(select(func.count(User.id)))
-    profiles_count = await session.scalar(select(func.count(MusicProfile.user_id)))
-    chats_count = await session.scalar(select(func.count(Chat.id)).where(Chat.is_active == True))
-    matches_count = await session.scalar(select(func.count(Match.id)))
-    
-    # Пользователи за последние 24 часа
-    from datetime import datetime, timedelta
-    day_ago = datetime.utcnow() - timedelta(days=1)
-    new_users_24h = await session.scalar(
-        select(func.count(User.id)).where(User.created_at >= day_ago)
-    )
-    
-    # Активные за 24 часа
-    active_24h = await session.scalar(
-        select(func.count(User.id)).where(User.last_active_at >= day_ago)
-    )
-    
-    # Конверсия в профиль
-    conversion = (profiles_count / users_count * 100) if users_count > 0 else 0
-    
-    # Среднее участников на чат
-    chat_members_count = await session.scalar(select(func.count(ChatMember.user_id)))
-    avg_per_chat = (chat_members_count / chats_count) if chats_count > 0 else 0
-    
-    await message.answer(
-        f"📊 <b>Статистика бота</b>\n\n"
-        f"👥 <b>Пользователи:</b>\n"
-        f"• Всего: {users_count}\n"
-        f"• Новых за 24ч: {new_users_24h}\n"
-        f"• Активных за 24ч: {active_24h}\n\n"
-        f"🎧 <b>Профили:</b>\n"
-        f"• Прошли тест: {profiles_count}\n"
-        f"• Конверсия: {conversion:.1f}%\n\n"
-        f"💬 <b>Чаты:</b>\n"
-        f"• Активных чатов: {chats_count}\n"
-        f"• Участников в чатах: {chat_members_count}\n"
-        f"• Среднее на чат: {avg_per_chat:.1f}\n\n"
-        f"🔥 <b>Совпадения:</b>\n"
-        f"• Всего матчей: {matches_count}",
-        parse_mode="HTML"
-    )
+    """Аналитика бота: пользователи, квизы, чаты, популярные жанры."""
+    from app.analytics import get_analytics_overview, get_popular_genres, format_analytics_message
+
+    data = await get_analytics_overview(session)
+    popular_genres = await get_popular_genres(session, limit=7)
+    text = format_analytics_message(data, popular_genres)
+    await message.answer(text, parse_mode="HTML")

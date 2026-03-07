@@ -14,6 +14,7 @@ GENRES = [
     {"id": "folk", "name": "Фолк", "emoji": "🪕"},
     {"id": "punk", "name": "Панк", "emoji": "🔥"},
     {"id": "soul", "name": "Соул", "emoji": "❤️"},
+    {"id": "other", "name": "Другое", "emoji": "✏️"},
 ]
 
 # Расширенные списки артистов по жанрам (актуальные 2024-2026)
@@ -197,6 +198,7 @@ MOODS = [
     {"id": "energetic", "name": "Весёлую / энергичную", "emoji": "☀️"},
     {"id": "calm", "name": "Спокойную / фоновую", "emoji": "🌊"},
     {"id": "aggressive", "name": "Агрессивную / драйвовую", "emoji": "🔥"},
+    {"id": "other", "name": "Свой вариант", "emoji": "✨"},
 ]
 
 ERAS = [
@@ -210,6 +212,15 @@ LANGUAGES = [
     {"id": "russian", "name": "На русском", "emoji": "🇷🇺"},
     {"id": "english", "name": "На английском", "emoji": "🇬🇧"},
     {"id": "both", "name": "Оба варианта", "emoji": "🌍"},
+]
+
+# Когда чаще слушаешь музыку (квиз — вопрос 3)
+WHEN_LISTEN = [
+    {"id": "morning", "name": "Утром", "emoji": "🌅"},
+    {"id": "day", "name": "Днём", "emoji": "☀️"},
+    {"id": "evening", "name": "Вечером", "emoji": "🌆"},
+    {"id": "night", "name": "Ночью", "emoji": "🌙"},
+    {"id": "anytime", "name": "В любое время", "emoji": "🕐"},
 ]
 
 # Роли в чате на основе профиля

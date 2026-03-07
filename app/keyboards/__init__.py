@@ -5,6 +5,7 @@ from .inline import (
     get_mood_keyboard,
     get_era_keyboard,
     get_language_keyboard,
+    get_when_listen_keyboard,
     get_profile_keyboard,
     get_chat_invite_keyboard,
     get_match_keyboard,
@@ -12,8 +13,9 @@ from .inline import (
     get_prediction_keyboard,
     get_chat_map_keyboard,
     get_paywall_keyboard,
+    get_chat_test_keyboard,
 )
-from .data import GENRES, POPULAR_ARTISTS, MOODS, ERAS
+from .data import GENRES, POPULAR_ARTISTS, MOODS, ERAS, WHEN_LISTEN
 
 __all__ = [
     "get_start_keyboard",
@@ -22,6 +24,7 @@ __all__ = [
     "get_mood_keyboard",
     "get_era_keyboard",
     "get_language_keyboard",
+    "get_when_listen_keyboard",
     "get_profile_keyboard",
     "get_chat_invite_keyboard",
     "get_match_keyboard",
@@ -29,8 +32,10 @@ __all__ = [
     "get_prediction_keyboard",
     "get_chat_map_keyboard",
     "get_paywall_keyboard",
+    "get_chat_test_keyboard",
     "GENRES",
     "POPULAR_ARTISTS",
     "MOODS",
     "ERAS",
+    "WHEN_LISTEN",
 ]

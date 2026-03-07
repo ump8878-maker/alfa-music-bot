@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, Boolean, DateTime, func
+from sqlalchemy import BigInteger, String, Boolean, DateTime, Float, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
@@ -29,6 +29,8 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
+    # Музыкальный "вкус" 0-100 для рейтинга в чате
+    score: Mapped[float] = mapped_column(Float, default=0.0)
     
     music_profile: Mapped[Optional["MusicProfile"]] = relationship(
         "MusicProfile",

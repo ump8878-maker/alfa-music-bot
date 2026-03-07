@@ -6,10 +6,11 @@ from .match import Match
 from .battle import Battle, BattleVote
 from .prediction import PredictionRound, PredictionAnswer
 from .payment import Payment, UserUnlock
+from .quiz_result import QuizResult
 
 __all__ = [
     "Base",
-    "async_session", 
+    "async_session",
     "engine",
     "init_db",
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "PredictionAnswer",
     "Payment",
     "UserUnlock",
+    "QuizResult",
 ]

@@ -18,6 +18,14 @@ class Chat(Base):
     member_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     map_unlocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Рейтинг чата для глобального топа (0-100)
+    rating: Mapped[float] = mapped_column(default=0.0)
+    # Владелец чата (кто добавил бота) — для отображения в глобальном рейтинге
+    owner_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id"),
+        nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()
@@ -32,7 +40,12 @@ class Chat(Base):
         "ChatMember",
         back_populates="chat"
     )
-    added_by: Mapped[Optional["User"]] = relationship("User")
+    added_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[added_by_user_id]
+    )
+    owner: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[owner_id]
+    )
     
     @property
     def tested_members_count(self) -> int:

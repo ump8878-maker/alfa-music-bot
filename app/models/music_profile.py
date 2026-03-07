@@ -28,6 +28,8 @@ class MusicProfile(Base):
     mood: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     era: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     language_pref: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Когда чаще слушаешь музыку: morning, day, evening, night, anytime
+    listening_time: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     rarity_score: Mapped[float] = mapped_column(Float, default=0.5)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
