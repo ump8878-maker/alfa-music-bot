@@ -146,3 +146,84 @@ async def get_user_rank_in_chat(
         if u.id == user_id:
             return i
     return None
+
+
+def _taste_similarity(p1: MusicProfile, p2: MusicProfile) -> float:
+    """Похожесть вкусов 0..1: жанры и артисты (Jaccard)."""
+    g1 = set((g.get("name") or "").strip().lower() for g in (p1.genres or []))
+    g2 = set((g.get("name") or "").strip().lower() for g in (p2.genres or []))
+    a1 = set((a.get("name") or "").strip().lower() for a in (p1.artists or []))
+    a2 = set((a.get("name") or "").strip().lower() for a in (p2.artists or []))
+    g1.discard("")
+    g2.discard("")
+    a1.discard("")
+    a2.discard("")
+    jaccard_g = len(g1 & g2) / len(g1 | g2) if (g1 or g2) else 0
+    jaccard_a = len(a1 & a2) / len(a1 | a2) if (a1 or a2) else 0
+    if p1.mood and p2.mood and p1.mood == p2.mood:
+        mood_bonus = 0.1
+    else:
+        mood_bonus = 0
+    return min(1.0, (jaccard_g * 0.5 + jaccard_a * 0.5) + mood_bonus)
+
+
+async def get_closest_in_chat(
+    session: AsyncSession, chat_id: int, user_id: int
+) -> Optional[Tuple[User, float]]:
+    """Ближайший по вкусу участник чата (кроме user_id). Возвращает (User, similarity 0–100) или None."""
+    ranking = await get_chat_member_ranking(session, chat_id)
+    profiles_result = await session.execute(
+        select(MusicProfile).where(
+            MusicProfile.user_id.in_([r[0].id for r in ranking])
+        )
+    )
+    profiles = {p.user_id: p for p in profiles_result.scalars().all()}
+    my_profile = profiles.get(user_id)
+    if not my_profile or len(ranking) < 2:
+        return None
+    best_user, best_score = None, -1.0
+    for u, p, _ in ranking:
+        if u.id == user_id:
+            continue
+        prof = profiles.get(u.id)
+        if not prof:
+            continue
+        sim = _taste_similarity(my_profile, prof)
+        if sim > best_score:
+            best_score = sim
+            best_user = u
+    if best_user is None:
+        return None
+    return (best_user, round(best_score * 100, 0))
+
+
+async def get_rarity_percentile_in_chat(
+    session: AsyncSession, chat_id: int, user_id: int
+) -> Optional[int]:
+    """Топ-X% по редкости в чате (100 = самый редкий). None если нет профиля или один в чате."""
+    members_result = await session.execute(
+        select(ChatMember.user_id).where(
+            ChatMember.chat_id == chat_id,
+            ChatMember.has_completed_test == True,
+        )
+    )
+    user_ids = [r[0] for r in members_result.fetchall()]
+    if len(user_ids) < 2 or user_id not in user_ids:
+        return None
+    all_profiles_result = await session.execute(
+        select(MusicProfile).where(MusicProfile.user_id.in_(user_ids))
+    )
+    all_profiles = list(all_profiles_result.scalars().all())
+    my_p = next((p for p in all_profiles if p.user_id == user_id), None)
+    if not my_p:
+        return None
+    rarities = [getattr(p, "rarity_score", 0.5) or 0.5 for p in all_profiles]
+    if not rarities:
+        return None
+    my_r = getattr(my_p, "rarity_score", 0.5) or 0.5
+    # Сколько людей с редкостью строго ниже (более мейнстрим) — мы реже их
+    count_less = sum(1 for r in rarities if r < my_r)
+    n = len(rarities)
+    # Топ-X%: X = доля участников с редкостью не ниже нашей. Самый редкий → топ-100/n %, наименее редкий → топ-100%
+    percentile = int(100 * (n - count_less) / n) if n else 0
+    return min(100, max(1, percentile)) if n else None

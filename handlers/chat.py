@@ -14,15 +14,21 @@ from services.chat_analytics import (
     calculate_chat_profile,
     generate_chat_comment,
 )
-from services.rating_helpers import get_chat_member_ranking
+from services.rating_helpers import (
+    get_chat_member_ranking,
+    get_closest_in_chat,
+    get_rarity_percentile_in_chat,
+)
 from services.chat_rating import (
     calculate_chat_rating,
     get_chat_rank,
+    get_chat_level_name,
     get_global_chat_ranking,
     get_needed_participants_for_next_rank,
     can_send_growth_message,
     mark_growth_message_sent,
 )
+from utils.humor import get_scan_trigger_question
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +86,10 @@ async def try_send_growth_message(
     bot_info = await bot.get_me()
     from utils.humor import get_growth_comment
     comment = get_growth_comment()
+    level_name = get_chat_level_name(needed.current_position)
     if needed.needed_count > 0:
         text = (
-            f"🔥 Ваш чат <b>#{needed.current_position}</b> из {needed.total_chats}.\n\n"
+            f"🔥 Ваш чат <b>#{needed.current_position}</b> из {needed.total_chats} — уровень «{level_name}».\n\n"
             f"{comment}\n\n"
             f"До следующего места — ещё {needed.needed_count} участников."
         )
@@ -90,7 +97,7 @@ async def try_send_growth_message(
             text += f"\nОбгоните: {needed.next_competitor_title}"
     else:
         text = (
-            f"🔥 Ваш чат <b>#{needed.current_position}</b> в рейтинге.\n\n"
+            f"🔥 Ваш чат <b>#{needed.current_position}</b> в рейтинге — уровень «{level_name}».\n\n"
             f"{comment}"
         )
     try:
@@ -210,10 +217,22 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
     scale_bar = "█" * filled + "░" * (bar_len - filled)
     rarity_label = "редкий вкус" if rare_pct >= 50 else "ближе к чартам"
 
+    # Топ участников по баллу — нужен для прогресса и персональных строк
+    ranking = await get_chat_member_ranking(session, chat_id)
+    participants = len(ranking)
+    full_map_count = 10
+    progress_pct = min(100, int(100 * participants / full_map_count))
+    remaining = max(0, full_map_count - participants)
+    progress_line = f"Чат на <b>{progress_pct}%</b> к полной карте"
+    if remaining > 0:
+        progress_line += f" (ещё {remaining} чел. — расширенная статистика)"
+    progress_line += ".\n"
+
     lines = [
         "🎧 <b>Музыкальный скан чата</b>\n",
         f"<b>{profile.profile_name}</b>\n",
         f"Вайб: {profile.vibe_text}\n",
+        progress_line,
         f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
         "<i>Рейтинг вкуса: полнота квиза + разнообразие выбора + небольшой бонус за редкий вкус. Без предвзятости к жанрам.</i>\n",
         f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
@@ -225,8 +244,6 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         lines.append(
             f"<b>По редкости:</b> {main_c} чел. — ближе к чартам, {rare_c} чел. — более редкий вкус.\n"
         )
-    # Топ участников по баллу вкуса — итоговая оценка участников чата
-    ranking = await get_chat_member_ranking(session, chat_id)
     if ranking:
         lines.append("\n<b>Топ по вкусу в чате:</b>")
         for i, (user, _, score) in enumerate(ranking[:5], 1):
@@ -240,7 +257,21 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
             lines.append(f"  {name}: {pct}%")
     if profile.top_artists:
         lines.append("\n<b>Топ артистов:</b> " + ", ".join(profile.top_artists[:8]))
+    # Персонально для того, кто запросил скан
+    requestor_id = message.from_user.id if message.from_user else None
+    if requestor_id and participants >= 2:
+        closest = await get_closest_in_chat(session, chat_id, requestor_id)
+        if closest:
+            other_user, sim = closest
+            name = other_user.display_name or other_user.mention or "участник"
+            if len(name) > 20:
+                name = name[:17] + "…"
+            lines.append(f"\n<b>Ты ближе всего по вкусу к</b> {name} — {int(sim)}% совпадение.")
+        rarity_pct = await get_rarity_percentile_in_chat(session, chat_id, requestor_id)
+        if rarity_pct is not None:
+            lines.append(f"<b>Твой вкус</b> в топ-{rarity_pct}% по редкости в этом чате.")
     lines.append(f"\n\n{comment}")
+    lines.append(f"\n💬 {get_scan_trigger_question()}")
     text = "\n".join(lines)
     await message.answer(text, parse_mode="HTML")
 
@@ -258,6 +289,7 @@ async def cmd_chat_rating(message: Message, session: AsyncSession) -> None:
         return
     rank = await get_chat_rank(session, chat_id)
     needed = await get_needed_participants_for_next_rank(session, chat_id)
+    level_name = get_chat_level_name(rank[0]) if rank else "Участник"
     text = (
         f"📊 <b>Рейтинг чата</b>\n\n"
         f"Балл: <b>{chat.rating}/100</b>\n"
@@ -265,6 +297,7 @@ async def cmd_chat_rating(message: Message, session: AsyncSession) -> None:
     if rank:
         pos, total = rank
         text += f"Место: <b>#{pos}</b> из {total}\n"
+        text += f"Уровень чата: <b>«{level_name}»</b>\n"
     if needed and needed.needed_count > 0:
         text += f"\nДобрать {needed.needed_count} участников — подниметесь выше."
         if needed.next_competitor_title:

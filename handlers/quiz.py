@@ -27,6 +27,7 @@ from services.chat_rating import (
     get_needed_participants_for_next_rank,
 )
 from utils.humor import get_top_comment
+from utils.taste_phrase import generate_taste_phrase
 
 router = Router()
 
@@ -224,7 +225,7 @@ async def select_mood_and_finish(
         score=float(taste_score),
     )
     session.add(quiz_result)
-    await session.commit()
+    await session.flush()
     await session.refresh(profile)
 
     if chat_id:
@@ -242,11 +243,18 @@ async def select_mood_and_finish(
 
     await state.clear()
 
-    # Итог пользователю
+    # Итог пользователю: архетип, балл, фраза о вкусе, строка для шаринга
+    taste_phrase = generate_taste_phrase(profile)
+    bot_info = await callback.bot.get_me()
+    share_link = f"https://t.me/{bot_info.username}"
+    share_line = f"Архетип: {profile.profile_type}, вкус {taste_score}/100. Пройти тест: {share_link}"
+
     result_text = (
         f"🎉 <b>Готово!</b>\n\n"
         f"<b>Профиль:</b> {profile.profile_type}\n"
         f"<b>Вкус:</b> {taste_score}/100\n"
+        f"<b>Твой вайб:</b> {taste_phrase}\n\n"
+        f"📤 <i>Скопируй и поделись:</i>\n<code>{share_line}</code>\n"
     )
     if chat_id:
         my_rank = await get_user_rank_in_chat(session, user_id, chat_id)
@@ -267,7 +275,6 @@ async def select_mood_and_finish(
         await callback.message.delete()
     except Exception:
         pass
-    bot_info = await callback.bot.get_me()
     await callback.message.answer(
         result_text,
         reply_markup=get_finish_quiz_keyboard(bot_info.username),

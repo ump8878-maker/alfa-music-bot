@@ -10,6 +10,7 @@ from database.models import User, MusicProfile
 from keyboards import get_start_keyboard, get_profile_keyboard
 from states import QuizStates
 from services.rating_helpers import compute_user_taste_score
+from utils.taste_phrase import generate_taste_phrase
 
 router = Router()
 BOT_VERSION = "v2 · скан и рейтинг чатов"
@@ -102,10 +103,12 @@ async def cmd_profile(message: Message, session: AsyncSession):
         return
 
     taste = compute_user_taste_score(profile)
+    taste_phrase = generate_taste_phrase(profile)
     text = (
         f"🎧 <b>Твой профиль</b>\n\n"
         f"<b>Архетип:</b> {profile.profile_type}\n"
-        f"<b>Вкус:</b> {taste}/100\n\n"
+        f"<b>Вкус:</b> {taste}/100\n"
+        f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         "Пройти заново или добавить бота в чат — кнопки ниже."
     )
     await message.answer(

@@ -21,6 +21,24 @@ WEIGHT_ENGAGEMENT = 8
 WEIGHT_RARITY = 5        # бонус чату за среднюю редкость вкуса (интереснее)
 
 
+# Названия уровней чата по позиции в рейтинге (для геймификации)
+CHAT_LEVELS = [
+    (1, 3, "Коллектив"),
+    (4, 10, "Меломан"),
+    (11, 20, "Группа"),
+    (21, 50, "Участник"),
+    (51, 999, "Начинающий"),
+]
+
+
+def get_chat_level_name(position: int) -> str:
+    """Название уровня чата по позиции в рейтинге (1-based)."""
+    for lo, hi, name in CHAT_LEVELS:
+        if lo <= position <= hi:
+            return name
+    return "Участник"
+
+
 @dataclass
 class NeededForNextRank:
     current_position: int
