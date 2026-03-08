@@ -14,7 +14,10 @@ def _env(key: str, default: str = "") -> str:
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
-    return _env(key).lower() in ("1", "true", "yes")
+    val = _env(key)
+    if not val:
+        return default
+    return val.lower() in ("1", "true", "yes")
 
 
 def _env_int(key: str, default: int = 0) -> int:

@@ -16,8 +16,9 @@ from services.chat_analytics import (
 )
 from services.rating_helpers import (
     get_chat_member_ranking,
-    get_closest_in_chat,
-    get_rarity_percentile_in_chat,
+    find_rarest_user,
+    find_closest_in_ranking,
+    calc_rarity_percentile,
 )
 from services.chat_rating import (
     calculate_chat_rating,
@@ -25,8 +26,6 @@ from services.chat_rating import (
     get_chat_level_name,
     get_global_chat_ranking,
     get_needed_participants_for_next_rank,
-    can_send_growth_message,
-    mark_growth_message_sent,
 )
 from utils.humor import get_scan_trigger_question
 
@@ -34,82 +33,6 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 MIN_PARTICIPANTS = getattr(settings, "min_participants_for_scan", 3)
-
-
-async def ensure_chat_member_completed(
-    session: AsyncSession, chat_id: int, user_id: int
-) -> None:
-    result = await session.execute(
-        select(ChatMember).where(
-            ChatMember.chat_id == chat_id,
-            ChatMember.user_id == user_id,
-        )
-    )
-    member = result.scalar_one_or_none()
-    if not member:
-        member = ChatMember(chat_id=chat_id, user_id=user_id)
-        session.add(member)
-    member.has_completed_test = True
-
-
-async def post_quiz_result_to_chat(
-    bot,
-    session: AsyncSession,
-    chat_id: int,
-    user_id: int,
-    profile: MusicProfile,
-) -> None:
-    user = await session.get(User, user_id)
-    name = user.display_name if user else "Участник"
-    bot_info = await bot.get_me()
-    text = (
-        f"🎧 <b>{name}</b> прошёл музыкальный тест\n\n"
-        f"<b>Профиль:</b> {profile.profile_type}\n\n"
-        "Узнай свой вкус — пройди тест 👇"
-    )
-    await bot.send_message(
-        chat_id,
-        text,
-        reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
-        parse_mode="HTML",
-    )
-
-
-async def try_send_growth_message(
-    bot, session: AsyncSession, chat_id: int
-) -> None:
-    if not await can_send_growth_message(session, chat_id):
-        return
-    needed = await get_needed_participants_for_next_rank(session, chat_id)
-    if not needed or needed.total_chats == 0:
-        return
-    bot_info = await bot.get_me()
-    from utils.humor import get_growth_comment
-    comment = get_growth_comment()
-    level_name = get_chat_level_name(needed.current_position)
-    if needed.needed_count > 0:
-        text = (
-            f"🔥 Ваш чат <b>#{needed.current_position}</b> из {needed.total_chats} — уровень «{level_name}».\n\n"
-            f"{comment}\n\n"
-            f"До следующего места — ещё {needed.needed_count} участников."
-        )
-        if needed.next_competitor_title:
-            text += f"\nОбгоните: {needed.next_competitor_title}"
-    else:
-        text = (
-            f"🔥 Ваш чат <b>#{needed.current_position}</b> в рейтинге — уровень «{level_name}».\n\n"
-            f"{comment}"
-        )
-    try:
-        await bot.send_message(
-            chat_id,
-            text,
-            reply_markup=get_chat_menu_keyboard(bot_info.username, chat_id),
-            parse_mode="HTML",
-        )
-        await mark_growth_message_sent(session, chat_id)
-    except Exception as e:
-        logger.debug("Growth message not sent: %s", e)
 
 
 @router.my_chat_member(ChatMemberUpdatedFilter(IS_NOT_MEMBER >> IS_MEMBER))
@@ -161,7 +84,6 @@ async def bot_added_to_chat(
         select(MusicProfile).where(MusicProfile.user_id == user_id)
     )
     member.has_completed_test = profile_result.scalar_one_or_none() is not None
-    await session.commit()
 
     bot_info = await event.bot.get_me()
     completed = 1 if member.has_completed_test else 0
@@ -191,7 +113,6 @@ async def bot_removed_from_chat(
     chat = await session.get(Chat, event.chat.id)
     if chat:
         chat.is_active = False
-        await session.commit()
 
 
 @router.message(Command("chat_scan"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -234,7 +155,7 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         f"Вайб: {profile.vibe_text}\n",
         progress_line,
         f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
-        "<i>Рейтинг вкуса: полнота квиза + разнообразие выбора + небольшой бонус за редкий вкус. Без предвзятости к жанрам.</i>\n",
+        "<i>Балл вкуса: полнота квиза (30) + разнообразие жанров и артистов (50) + редкость (15) + бонус за вайб (5). Чем полнее и разнообразнее — тем выше.</i>\n",
         f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
         "<i>Шкала: слева — популярные чарты (Яндекс.Музыка, Beatport, DJ Mag), справа — более редкий вкус.</i>\n",
     ]
@@ -244,13 +165,32 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         lines.append(
             f"<b>По редкости:</b> {main_c} чел. — ближе к чартам, {rare_c} чел. — более редкий вкус.\n"
         )
+    # Титулы: лучший по баллу и самый редкий вкус
+    rarest = find_rarest_user(ranking)
     if ranking:
-        lines.append("\n<b>Топ по вкусу в чате:</b>")
-        for i, (user, _, score) in enumerate(ranking[:5], 1):
+        lines.append("\n<b>🏆 Титулы в чате:</b>")
+        first_user, _, first_score = ranking[0]
+        first_name = first_user.display_name or first_user.mention or "Участник"
+        if len(first_name) > 20:
+            first_name = first_name[:17] + "…"
+        lines.append(f"  🥇 <b>Лучший балл:</b> {first_name} — {first_score}/100")
+        if rarest:
+            rarest_user, rarest_profile, rarest_r = rarest
+            rarest_name = rarest_user.display_name or rarest_user.mention or "Участник"
+            if len(rarest_name) > 20:
+                rarest_name = rarest_name[:17] + "…"
+            # Показать только если самый редкий — не тот же, что первый (или всё равно показать)
+            lines.append(f"  🏅 <b>Самый редкий вкус:</b> {rarest_name} ({int(rarest_r * 100)}%)")
+        lines.append("\n<b>Рейтинг участников:</b>")
+        medal = ["🥇", "🥈", "🥉"]
+        for i, (user, prof, score) in enumerate(ranking[:10], 1):
             name = user.display_name or user.mention or f"Участник {i}"
-            if len(name) > 25:
-                name = name[:22] + "…"
-            lines.append(f"  {i}. {name} — <b>{score}</b>/100")
+            if len(name) > 22:
+                name = name[:19] + "…"
+            badge = medal[i - 1] if i <= 3 else f"{i}."
+            is_rarest = rarest and rarest[0].id == user.id
+            rare_tag = " 🏅" if is_rarest else ""
+            lines.append(f"  {badge} {name} — <b>{score}</b>/100{rare_tag}")
     if profile.genre_stats:
         lines.append("\n<b>Жанры:</b>")
         for name, pct in profile.genre_stats[:8]:
@@ -260,20 +200,58 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
     # Персонально для того, кто запросил скан
     requestor_id = message.from_user.id if message.from_user else None
     if requestor_id and participants >= 2:
-        closest = await get_closest_in_chat(session, chat_id, requestor_id)
+        closest = find_closest_in_ranking(ranking, requestor_id)
         if closest:
             other_user, sim = closest
             name = other_user.display_name or other_user.mention or "участник"
             if len(name) > 20:
                 name = name[:17] + "…"
             lines.append(f"\n<b>Ты ближе всего по вкусу к</b> {name} — {int(sim)}% совпадение.")
-        rarity_pct = await get_rarity_percentile_in_chat(session, chat_id, requestor_id)
+        rarity_pct = calc_rarity_percentile(ranking, requestor_id)
         if rarity_pct is not None:
             lines.append(f"<b>Твой вкус</b> в топ-{rarity_pct}% по редкости в этом чате.")
     lines.append(f"\n\n{comment}")
     lines.append(f"\n💬 {get_scan_trigger_question()}")
     text = "\n".join(lines)
     await message.answer(text, parse_mode="HTML")
+
+
+@router.message(Command("chat_top"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def cmd_chat_top(message: Message, session: AsyncSession) -> None:
+    """Рейтинг участников чата по баллу вкуса + титулы (редкий, лучший)."""
+    chat_id = message.chat.id
+    ranking = await get_chat_member_ranking(session, chat_id)
+    if len(ranking) < 2:
+        bot_info = await message.bot.get_me()
+        await message.answer(
+            "Нужно минимум 2 участников с пройденным тестом. Пройди тест и позови друзей 👇",
+            reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+            parse_mode="HTML",
+        )
+        return
+    rarest = find_rarest_user(ranking)
+    lines = ["🏆 <b>Рейтинг участников чата</b>\n"]
+    first_user, _, first_score = ranking[0]
+    first_name = first_user.display_name or first_user.mention or "Участник"
+    if len(first_name) > 20:
+        first_name = first_name[:17] + "…"
+    lines.append(f"🥇 <b>Лучший балл:</b> {first_name} — {first_score}/100")
+    if rarest:
+        ru, rp, rr = rarest
+        rn = ru.display_name or ru.mention or "Участник"
+        if len(rn) > 20:
+            rn = rn[:17] + "…"
+        lines.append(f"🏅 <b>Самый редкий вкус:</b> {rn} ({int(rr * 100)}%)\n")
+    medal = ["🥇", "🥈", "🥉"]
+    for i, (user, prof, score) in enumerate(ranking[:15], 1):
+        name = user.display_name or user.mention or f"Участник {i}"
+        if len(name) > 22:
+            name = name[:19] + "…"
+        badge = medal[i - 1] if i <= 3 else f"{i}."
+        is_rarest = rarest and rarest[0].id == user.id
+        rare_tag = " 🏅" if is_rarest else ""
+        lines.append(f"  {badge} {name} — <b>{score}</b>/100{rare_tag}")
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("chat_rating"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))

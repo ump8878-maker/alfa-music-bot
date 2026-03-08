@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
+from typing import Optional, List, Dict, Any
 
 from sqlalchemy import (
     BigInteger,
@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     Integer,
+    Index,
     ForeignKey,
     func,
     JSON,
@@ -15,9 +16,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
-
-if TYPE_CHECKING:
-    from . import User, Chat, MusicProfile
 
 
 class User(Base):
@@ -103,6 +101,9 @@ class Chat(Base):
 
 class ChatMember(Base):
     __tablename__ = "chat_members"
+    __table_args__ = (
+        Index("ix_chat_members_completed", "chat_id", "has_completed_test"),
+    )
 
     chat_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("chats.id"), primary_key=True

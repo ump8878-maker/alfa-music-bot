@@ -20,6 +20,9 @@ from services.rating_helpers import (
     compute_rarity_score,
     get_chat_member_ranking,
     get_user_rank_in_chat,
+    get_taste_score_breakdown,
+    get_taste_explanation,
+    get_competitor_above,
 )
 from services.chat_rating import (
     calculate_chat_rating,
@@ -230,7 +233,7 @@ async def select_mood_and_finish(
 
     if chat_id:
         await calculate_chat_rating(session, chat_id)
-        from handlers.chat import ensure_chat_member_completed, post_quiz_result_to_chat, try_send_growth_message
+        from services.quiz_actions import ensure_chat_member_completed, post_quiz_result_to_chat, try_send_growth_message
         await ensure_chat_member_completed(session, chat_id, user_id)
         await post_quiz_result_to_chat(
             callback.bot,
@@ -243,7 +246,9 @@ async def select_mood_and_finish(
 
     await state.clear()
 
-    # Итог пользователю: архетип, балл, фраза о вкусе, строка для шаринга
+    # Итог: архетип, разбивка балла, объяснение, фраза о вкусе, шаринг
+    breakdown = get_taste_score_breakdown(profile)
+    explanation = get_taste_explanation(profile)
     taste_phrase = generate_taste_phrase(profile)
     bot_info = await callback.bot.get_me()
     share_link = f"https://t.me/{bot_info.username}"
@@ -252,7 +257,9 @@ async def select_mood_and_finish(
     result_text = (
         f"🎉 <b>Готово!</b>\n\n"
         f"<b>Профиль:</b> {profile.profile_type}\n"
-        f"<b>Вкус:</b> {taste_score}/100\n"
+        f"<b>Вкус:</b> {breakdown.total}/100\n"
+        f"<i>{breakdown.to_short_str()}</i>\n"
+        f"<b>Как считаем:</b> {explanation}\n"
         f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         f"📤 <i>Скопируй и поделись:</i>\n<code>{share_line}</code>\n"
     )
@@ -260,16 +267,25 @@ async def select_mood_and_finish(
         my_rank = await get_user_rank_in_chat(session, user_id, chat_id)
         if my_rank:
             comment = get_top_comment(my_rank)
-            result_text += f"\n🏆 Место в чате: <b>{my_rank}</b>. {comment.capitalize()}"
+            result_text += f"\n\n🏆 <b>Место в чате: #{my_rank}</b>. {comment.capitalize()}"
+        # Соревновательность: кого обогнать
+        competitor = await get_competitor_above(session, chat_id, user_id)
+        if competitor:
+            rank_above, user_above, score_above = competitor
+            need_pts = score_above - taste_score + 1
+            name_above = user_above.display_name or user_above.mention or "соперник"
+            if len(name_above) > 18:
+                name_above = name_above[:15] + "…"
+            result_text += f"\n🔥 <b>Обгони {name_above}</b> — ещё <b>{need_pts}</b> баллов до #{rank_above} места!"
         rank = await get_chat_rank(session, chat_id)
         needed = await get_needed_participants_for_next_rank(session, chat_id)
         if rank:
             pos, total = rank
-            result_text += f"\n\n📊 Рейтинг чата: <b>#{pos}</b> из {total}"
+            result_text += f"\n📊 Рейтинг чата: <b>#{pos}</b> из {total}"
         if needed and needed.needed_count > 0:
-            result_text += f"\nЕщё {needed.needed_count} человек — поднимитесь выше."
+            result_text += f"\nЕщё {needed.needed_count} участников — чат поднимется выше."
             if needed.next_competitor_title:
-                result_text += f" Ближайший сосед: {needed.next_competitor_title}"
+                result_text += f" Ближайший чат: {needed.next_competitor_title}"
 
     try:
         await callback.message.delete()

@@ -1,10 +1,35 @@
 """Хелперы для рейтинга: полнота профиля, вкус пользователя, жанры и участники чата."""
+from dataclasses import dataclass
 from typing import List, Tuple, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from database.models import User, ChatMember, MusicProfile
+
+# Веса балла вкуса (итого 100): полнота 30, разнообразие 50, редкость 15, бонус 5
+MAX_COMPLETENESS = 30
+MAX_DIVERSITY = 50
+MAX_RARITY = 15
+MAX_CONSISTENCY = 5
+
+
+@dataclass
+class TasteScoreBreakdown:
+    """Разбивка балла вкуса по компонентам."""
+    completeness: int   # 0..30
+    diversity: int     # 0..50
+    rarity: int        # 0..15
+    consistency: int   # 0..5
+    total: int         # 0..100
+
+    def to_short_str(self) -> str:
+        return (
+            f"Полнота {self.completeness}/{MAX_COMPLETENESS}, "
+            f"Разнообразие {self.diversity}/{MAX_DIVERSITY}, "
+            f"Редкость {self.rarity}/{MAX_RARITY}, "
+            f"Бонус {self.consistency}/{MAX_CONSISTENCY}"
+        )
 
 
 def profile_completeness(profile: MusicProfile) -> float:
@@ -22,25 +47,81 @@ def profile_completeness(profile: MusicProfile) -> float:
     return filled / total
 
 
-def compute_user_taste_score(profile: MusicProfile) -> int:
+def get_taste_score_breakdown(profile: MusicProfile) -> TasteScoreBreakdown:
     """
-    Вкус 0–100: полнота квиза (45) + разнообразие выбора (45) + бонус редкости (10).
-    Полнота: все 4 поля заполнены. Разнообразие: 2–4 жанра и несколько артистов дают макс.
-    Редкость: вкус «не только из чартов» даёт до +10. Без предвзятости к жанрам.
+    Разбивка балла вкуса 0–100:
+    - Полнота (30): все 4 поля квиза заполнены.
+    - Разнообразие (50): жанры (до 25) + артисты (до 25) — чем шире выбор, тем выше.
+    - Редкость (15): вкус не только из чартов (Яндекс.Музыка, Beatport, DJ Mag) даёт до +15.
+    - Бонус консистентности (5): время слушания + настроение совпадают по вайбу (ночь+меланхолия и т.п.).
     """
-    completeness = profile_completeness(profile)
+    filled = 0
+    if profile.genres and len(profile.genres) > 0:
+        filled += 1
+    if profile.artists and len(profile.artists) > 0:
+        filled += 1
+    if profile.mood:
+        filled += 1
+    if getattr(profile, "listening_time", None):
+        filled += 1
+    completeness = int(MAX_COMPLETENESS * (filled / 4))
+
     n_genres = len(profile.genres or [])
     n_artists = len(profile.artists or [])
-    # Разнообразие: сладкая точка 2–4 жанра, 3–10 артистов (не наказываем за 1, но макс за разнообразие)
-    genre_part = min(n_genres / 4, 1.0) * 22.5
-    artist_part = min(n_artists / 10, 1.0) * 22.5
-    diversity = genre_part + artist_part
-    completeness_bonus = completeness * 45
-    # Небольшой бонус за редкий вкус (0–10), чтобы оценка была интереснее
-    rarity = getattr(profile, "rarity_score", 0.5) or 0.5
-    rarity_bonus = rarity * 10
-    score = completeness_bonus + diversity + rarity_bonus
-    return min(100, max(0, int(score)))
+    genre_pts = min(n_genres / 4, 1.0) * 25
+    artist_pts = min(n_artists / 10, 1.0) * 25
+    diversity = int(genre_pts + artist_pts)
+
+    r = getattr(profile, "rarity_score", 0.5) or 0.5
+    rarity = int(r * MAX_RARITY)
+
+    # Бонус консистентности: время + настроение «в паре»
+    consistency = 0
+    lt = (getattr(profile, "listening_time", None) or "").strip().lower()
+    mood = (profile.mood or "").strip().lower()
+    if lt and mood:
+        night_melancholic = lt == "night" and mood == "melancholic"
+        day_energetic = lt in ("day", "morning") and mood == "energetic"
+        evening_calm = lt == "evening" and mood == "calm"
+        if night_melancholic or day_energetic or evening_calm:
+            consistency = MAX_CONSISTENCY
+        elif lt != "anytime" and mood != "other":
+            consistency = 2  # частичный бонус
+
+    total = min(100, completeness + diversity + rarity + consistency)
+    return TasteScoreBreakdown(
+        completeness=completeness,
+        diversity=diversity,
+        rarity=rarity,
+        consistency=consistency,
+        total=max(0, total),
+    )
+
+
+def get_taste_explanation(profile: MusicProfile) -> str:
+    """Короткое объяснение, откуда взялся балл вкуса."""
+    b = get_taste_score_breakdown(profile)
+    parts = []
+    if b.completeness >= MAX_COMPLETENESS:
+        parts.append("квиз заполнен полностью")
+    else:
+        parts.append(f"заполни все шаги квиза (+{MAX_COMPLETENESS - b.completeness} за полноту)")
+    if b.diversity >= 45:
+        parts.append("широкий выбор жанров и артистов")
+    elif b.diversity < 30:
+        parts.append("добавь больше жанров и артистов — выше балл")
+    if b.rarity >= 10:
+        parts.append("редкий вкус даёт бонус")
+    if b.consistency > 0:
+        parts.append("время и настроение в ладу — бонус")
+    if not parts:
+        return "Пройди квиз до конца и выбери разнообразнее — балл вырастет."
+    return " · ".join(parts).capitalize() + "."
+
+
+def compute_user_taste_score(profile: MusicProfile) -> int:
+    """Итоговый балл вкуса 0–100 (по разбивке: полнота + разнообразие + редкость + бонус)."""
+    return get_taste_score_breakdown(profile).total
 
 
 def compute_rarity_score(artist_names: list) -> float:
@@ -63,21 +144,27 @@ def compute_rarity_score(artist_names: list) -> float:
         return 0.5
 
 
-async def get_chat_member_ranking(
+async def _get_completed_user_ids(
     session: AsyncSession, chat_id: int
-) -> List[Tuple[User, MusicProfile, int]]:
-    """Список (user, profile, taste_score) в чате, по убыванию score."""
-    members_result = await session.execute(
-        select(ChatMember).where(
+) -> List[int]:
+    """Список user_id участников чата, прошедших тест."""
+    result = await session.execute(
+        select(ChatMember.user_id).where(
             ChatMember.chat_id == chat_id,
             ChatMember.has_completed_test == True,
         )
     )
-    members = members_result.scalars().all()
-    if not members:
+    return [r[0] for r in result.fetchall()]
+
+
+async def get_chat_member_ranking(
+    session: AsyncSession, chat_id: int
+) -> List[Tuple[User, MusicProfile, int]]:
+    """Список (user, profile, taste_score) в чате, по убыванию score."""
+    user_ids = await _get_completed_user_ids(session, chat_id)
+    if not user_ids:
         return []
 
-    user_ids = [m.user_id for m in members]
     users_result = await session.execute(select(User).where(User.id.in_(user_ids)))
     users = {u.id: u for u in users_result.scalars().all()}
 
@@ -99,17 +186,49 @@ async def get_chat_member_ranking(
     return rows
 
 
+def find_rarest_user(
+    ranking: List[Tuple[User, MusicProfile, int]],
+) -> Optional[Tuple[User, MusicProfile, float]]:
+    """Участник с самым редким вкусом из готового рейтинга. Чистая функция, без запросов."""
+    if not ranking:
+        return None
+    best = None
+    best_r = -1.0
+    for u, p, _ in ranking:
+        r = getattr(p, "rarity_score", 0.5) or 0.5
+        if r > best_r:
+            best_r = r
+            best = (u, p, r)
+    return best
+
+
+async def get_chat_rarest_user(
+    session: AsyncSession, chat_id: int
+) -> Optional[Tuple[User, MusicProfile, float]]:
+    """Участник чата с самым редким вкусом. Удобная обёртка с запросом."""
+    ranking = await get_chat_member_ranking(session, chat_id)
+    return find_rarest_user(ranking)
+
+
+async def get_competitor_above(
+    session: AsyncSession, chat_id: int, user_id: int
+) -> Optional[Tuple[int, User, int]]:
+    """Кто на месте выше в рейтинге чата и его балл. (rank_above, user_above, score_above) или None."""
+    ranking = await get_chat_member_ranking(session, chat_id)
+    for i, (u, _, score) in enumerate(ranking):
+        if u.id == user_id:
+            if i == 0:
+                return None  # уже первый
+            prev = ranking[i - 1]
+            return (i, prev[0], prev[2])  # rank i+1 (1-based), user, score
+    return None
+
+
 async def get_chat_genre_stats(
     session: AsyncSession, chat_id: int
 ) -> List[Tuple[str, float]]:
     """Доля жанров в чате в процентах: [(genre_name, percent), ...]."""
-    members_result = await session.execute(
-        select(ChatMember.user_id).where(
-            ChatMember.chat_id == chat_id,
-            ChatMember.has_completed_test == True,
-        )
-    )
-    user_ids = [row[0] for row in members_result.fetchall()]
+    user_ids = await _get_completed_user_ids(session, chat_id)
     if not user_ids:
         return []
 
@@ -167,28 +286,24 @@ def _taste_similarity(p1: MusicProfile, p2: MusicProfile) -> float:
     return min(1.0, (jaccard_g * 0.5 + jaccard_a * 0.5) + mood_bonus)
 
 
-async def get_closest_in_chat(
-    session: AsyncSession, chat_id: int, user_id: int
+def find_closest_in_ranking(
+    ranking: List[Tuple[User, MusicProfile, int]], user_id: int
 ) -> Optional[Tuple[User, float]]:
-    """Ближайший по вкусу участник чата (кроме user_id). Возвращает (User, similarity 0–100) или None."""
-    ranking = await get_chat_member_ranking(session, chat_id)
-    profiles_result = await session.execute(
-        select(MusicProfile).where(
-            MusicProfile.user_id.in_([r[0].id for r in ranking])
-        )
-    )
-    profiles = {p.user_id: p for p in profiles_result.scalars().all()}
-    my_profile = profiles.get(user_id)
-    if not my_profile or len(ranking) < 2:
+    """Ближайший по вкусу участник из готового рейтинга. Чистая функция, без запросов."""
+    if len(ranking) < 2:
+        return None
+    my_profile = None
+    for u, p, _ in ranking:
+        if u.id == user_id:
+            my_profile = p
+            break
+    if not my_profile:
         return None
     best_user, best_score = None, -1.0
     for u, p, _ in ranking:
         if u.id == user_id:
             continue
-        prof = profiles.get(u.id)
-        if not prof:
-            continue
-        sim = _taste_similarity(my_profile, prof)
+        sim = _taste_similarity(my_profile, p)
         if sim > best_score:
             best_score = sim
             best_user = u
@@ -197,33 +312,38 @@ async def get_closest_in_chat(
     return (best_user, round(best_score * 100, 0))
 
 
+async def get_closest_in_chat(
+    session: AsyncSession, chat_id: int, user_id: int
+) -> Optional[Tuple[User, float]]:
+    """Ближайший по вкусу участник чата. Удобная обёртка с запросом."""
+    ranking = await get_chat_member_ranking(session, chat_id)
+    return find_closest_in_ranking(ranking, user_id)
+
+
+def calc_rarity_percentile(
+    ranking: List[Tuple[User, MusicProfile, int]], user_id: int
+) -> Optional[int]:
+    """Топ-X% по редкости из готового рейтинга. Чистая функция, без запросов."""
+    if len(ranking) < 2:
+        return None
+    my_p = None
+    for u, p, _ in ranking:
+        if u.id == user_id:
+            my_p = p
+            break
+    if not my_p:
+        return None
+    rarities = [getattr(p, "rarity_score", 0.5) or 0.5 for _, p, _ in ranking]
+    my_r = getattr(my_p, "rarity_score", 0.5) or 0.5
+    count_less = sum(1 for r in rarities if r < my_r)
+    n = len(rarities)
+    percentile = int(100 * (n - count_less) / n) if n else 0
+    return min(100, max(1, percentile)) if n else None
+
+
 async def get_rarity_percentile_in_chat(
     session: AsyncSession, chat_id: int, user_id: int
 ) -> Optional[int]:
-    """Топ-X% по редкости в чате (100 = самый редкий). None если нет профиля или один в чате."""
-    members_result = await session.execute(
-        select(ChatMember.user_id).where(
-            ChatMember.chat_id == chat_id,
-            ChatMember.has_completed_test == True,
-        )
-    )
-    user_ids = [r[0] for r in members_result.fetchall()]
-    if len(user_ids) < 2 or user_id not in user_ids:
-        return None
-    all_profiles_result = await session.execute(
-        select(MusicProfile).where(MusicProfile.user_id.in_(user_ids))
-    )
-    all_profiles = list(all_profiles_result.scalars().all())
-    my_p = next((p for p in all_profiles if p.user_id == user_id), None)
-    if not my_p:
-        return None
-    rarities = [getattr(p, "rarity_score", 0.5) or 0.5 for p in all_profiles]
-    if not rarities:
-        return None
-    my_r = getattr(my_p, "rarity_score", 0.5) or 0.5
-    # Сколько людей с редкостью строго ниже (более мейнстрим) — мы реже их
-    count_less = sum(1 for r in rarities if r < my_r)
-    n = len(rarities)
-    # Топ-X%: X = доля участников с редкостью не ниже нашей. Самый редкий → топ-100/n %, наименее редкий → топ-100%
-    percentile = int(100 * (n - count_less) / n) if n else 0
-    return min(100, max(1, percentile)) if n else None
+    """Топ-X% по редкости в чате. Удобная обёртка с запросом."""
+    ranking = await get_chat_member_ranking(session, chat_id)
+    return calc_rarity_percentile(ranking, user_id)

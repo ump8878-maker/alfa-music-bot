@@ -121,7 +121,6 @@ async def calculate_chat_rating(session: AsyncSession, chat_id: int) -> float:
         if ranking:
             _, p, _ = ranking[0]
             stats.top_artists = [a.get("name", "") for a in (p.artists or [])[:5]]
-    await session.commit()
     return round(rating, 1)
 
 
@@ -228,4 +227,3 @@ async def mark_growth_message_sent(
         stats = ChatStats(chat_id=chat_id)
         session.add(stats)
     stats.last_growth_message_at = datetime.now(timezone.utc)
-    await session.commit()

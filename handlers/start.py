@@ -9,7 +9,11 @@ from sqlalchemy import select
 from database.models import User, MusicProfile
 from keyboards import get_start_keyboard, get_profile_keyboard
 from states import QuizStates
-from services.rating_helpers import compute_user_taste_score
+from services.rating_helpers import (
+    compute_user_taste_score,
+    get_taste_score_breakdown,
+    get_taste_explanation,
+)
 from utils.taste_phrase import generate_taste_phrase
 
 router = Router()
@@ -69,7 +73,7 @@ async def cmd_start_group(message: Message, session: AsyncSession):
     """В группе: короткая подсказка, тест — в личку."""
     bot_info = await message.bot.get_me()
     text = (
-        "👋 В группе я умею: <b>/chat_scan</b> (скан вкусов), <b>/chat_rating</b> (рейтинг чата).\n"
+        "👋 В группе: <b>/chat_scan</b> (скан вкусов), <b>/chat_top</b> (рейтинг участников), <b>/chat_rating</b> (рейтинг чата).\n"
         "Тест и профиль — только в личке. Напиши мне в личные сообщения 👇"
     )
     from keyboards.inline import get_chat_test_keyboard
@@ -102,12 +106,15 @@ async def cmd_profile(message: Message, session: AsyncSession):
         )
         return
 
-    taste = compute_user_taste_score(profile)
+    breakdown = get_taste_score_breakdown(profile)
+    explanation = get_taste_explanation(profile)
     taste_phrase = generate_taste_phrase(profile)
     text = (
         f"🎧 <b>Твой профиль</b>\n\n"
         f"<b>Архетип:</b> {profile.profile_type}\n"
-        f"<b>Вкус:</b> {taste}/100\n"
+        f"<b>Вкус:</b> {breakdown.total}/100\n"
+        f"<i>{breakdown.to_short_str()}</i>\n"
+        f"<b>Как считаем:</b> {explanation}\n"
         f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         "Пройти заново или добавить бота в чат — кнопки ниже."
     )
@@ -127,10 +134,10 @@ async def cmd_help(message: Message, session: AsyncSession):
         "📊 <b>Рейтинги:</b>\n"
         "  /profile — твой архетип и вкус (0–100)\n"
         "  /top_chats — глобальный топ чатов по вкусу\n"
-        "  В группе: /chat_rating — рейтинг и место этого чата\n\n"
+        "  В группе: /chat_top — рейтинг участников, /chat_rating — рейтинг чата\n\n"
         "👥 <b>Чаты и аналитика:</b>\n"
-        "  Добавь бота в группу → /chat_scan (жанры, артисты, вайб чата)\n"
-        "  /chat_rating — балл чата и сколько добрать до роста\n\n"
+        "  Добавь бота в группу → /chat_scan (скан вкусов), /chat_top (кто первый по баллу и редкости)\n"
+        "  /chat_rating — балл чата и место среди других чатов\n\n"
         "🏆 <b>Соревнования:</b>\n"
         "  После теста в группе — твоё место в рейтинге чата.\n"
         "  /top_chats — соревнование чатов между собой."
@@ -154,7 +161,7 @@ async def cmd_profile_group(message: Message):
 async def cmd_help_group(message: Message):
     """В группе: подсказка про команды здесь и в личке."""
     await message.answer(
-        "Здесь: <b>/chat_scan</b> — скан вкусов чата, <b>/chat_rating</b> — рейтинг чата.\n"
+        "Здесь: <b>/chat_scan</b> — скан вкусов, <b>/chat_top</b> — рейтинг участников, <b>/chat_rating</b> — рейтинг чата.\n"
         "В личке: /start, /profile, /top_chats, /help.",
         parse_mode="HTML",
     )

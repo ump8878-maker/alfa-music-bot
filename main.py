@@ -20,7 +20,7 @@ def _get_clean_token() -> str:
 
 
 logging.basicConfig(
-    level=logging.INFO if settings.debug else logging.WARNING,
+    level=logging.DEBUG if settings.debug else logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -33,6 +33,9 @@ async def on_startup(bot: Bot) -> None:
         BotCommand(command="start", description="Старт и начало теста"),
         BotCommand(command="profile", description="Мой профиль и вкус"),
         BotCommand(command="top_chats", description="Топ чатов по рейтингу"),
+        BotCommand(command="chat_scan", description="Скан вкусов чата"),
+        BotCommand(command="chat_top", description="Рейтинг участников чата"),
+        BotCommand(command="chat_rating", description="Рейтинг чата"),
         BotCommand(command="help", description="Рейтинги, чаты, аналитика"),
     ])
     bot_info = await bot.get_me()
