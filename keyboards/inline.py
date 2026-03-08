@@ -2,7 +2,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from typing import List, Set
 
-from .data import GENRES, MOODS, WHEN_LISTEN, get_shuffled_artists
+from .data import GENRES, MOODS, WHEN_LISTEN, GUILTY_GENRES, get_shuffled_artists
 
 
 def get_start_keyboard() -> InlineKeyboardMarkup:
@@ -76,6 +76,29 @@ def get_mood_keyboard() -> InlineKeyboardMarkup:
         )
     builder.row(InlineKeyboardButton(text="✏️ Предложить свой вариант", callback_data="mood:other"))
     builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_guilty_keyboard(selected: set = None) -> InlineKeyboardMarkup:
+    """Клавиатура «зашкварные жанры» — мультивыбор как в шаге жанров."""
+    selected = selected or set()
+    builder = InlineKeyboardBuilder()
+    for g in GUILTY_GENRES:
+        is_sel = g["id"] in selected
+        text = f"✅ {g['emoji']} {g['name']}" if is_sel else f"{g['emoji']} {g['name']}"
+        builder.button(text=text, callback_data=f"guilty:{g['id']}")
+    builder.adjust(3)
+    if selected:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"Готово ({len(selected)} выбрано)",
+                callback_data="guilty_done",
+            )
+        )
+    else:
+        builder.row(
+            InlineKeyboardButton(text="Пропустить →", callback_data="guilty_done")
+        )
     return builder.as_markup()
 
 

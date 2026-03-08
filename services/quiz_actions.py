@@ -45,7 +45,8 @@ async def post_quiz_result_to_chat(
     text = (
         f"🎧 <b>{name}</b> прошёл музыкальный тест\n\n"
         f"<b>Профиль:</b> {profile.profile_type}\n\n"
-        "Узнай свой вкус — пройди тест 👇"
+        "Пройди тест и увидишь результаты чата.\n"
+        "Большая часть участников уже прошла — результаты тебя удивят 👇"
     )
     await bot.send_message(
         chat_id,

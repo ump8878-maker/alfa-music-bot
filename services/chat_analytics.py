@@ -25,6 +25,7 @@ class ChatProfile:
     avg_rarity: float  # 0 = чарты, 1 = редкий
     rare_count: int
     mainstream_count: int
+    top_guilty: Optional[str] = None  # самый зашкварный жанр в чате
 
 
 async def collect_chat_music_stats(
@@ -58,7 +59,7 @@ async def collect_chat_music_stats(
 
     genre_counts: Dict[str, int] = {}
     artist_counts: Dict[str, int] = {}
-    mood_counts: Dict[str, int] = {}
+    guilty_counts: Dict[str, int] = {}
     listening_counts: Dict[str, int] = {}
     total_score = 0.0
     rarity_sum = 0.0
@@ -82,8 +83,8 @@ async def collect_chat_music_stats(
             name = (a.get("name") or "").strip()
             if name:
                 artist_counts[name] = artist_counts.get(name, 0) + 1
-        if p.mood:
-            mood_counts[p.mood] = mood_counts.get(p.mood, 0) + 1
+        for gg in (getattr(p, "guilty_genres", None) or []):
+            guilty_counts[gg] = guilty_counts.get(gg, 0) + 1
         if p.listening_time:
             listening_counts[p.listening_time] = listening_counts.get(
                 p.listening_time, 0
@@ -100,7 +101,7 @@ async def collect_chat_music_stats(
     top_artists = [
         name for name, _ in sorted(artist_counts.items(), key=lambda x: -x[1])[:15]
     ]
-    dominant_mood = max(mood_counts.items(), key=lambda x: x[1])[0] if mood_counts else None
+    top_guilty = max(guilty_counts.items(), key=lambda x: x[1])[0] if guilty_counts else None
     dominant_listening = (
         max(listening_counts.items(), key=lambda x: x[1])[0] if listening_counts else None
     )
@@ -111,7 +112,7 @@ async def collect_chat_music_stats(
         "participants_count": len(profiles),
         "genre_pcts": genre_pcts,
         "top_artists": top_artists,
-        "dominant_mood": dominant_mood,
+        "top_guilty": top_guilty,
         "dominant_listening": dominant_listening,
         "avg_score": round(avg_score, 1),
         "genre_counts": genre_counts,
@@ -124,7 +125,6 @@ async def collect_chat_music_stats(
 def _derive_profile_name(stats: Dict[str, Any]) -> str:
     genre_pcts = stats.get("genre_pcts") or []
     top_genres = [g[0].lower() for g in genre_pcts[:3]]
-    mood = stats.get("dominant_mood")
     listening = stats.get("dominant_listening")
 
     if any(
@@ -132,7 +132,7 @@ def _derive_profile_name(stats: Dict[str, Any]) -> str:
     ):
         return "Ночные меломаны" if listening == "night" else "Электронный клуб"
     if any(g in ("indie", "инди") for g in top_genres):
-        return "Инди-меланхолики" if mood == "melancholic" else "Инди-семья"
+        return "Инди-семья"
     if any(g in ("rock", "рок", "metal", "метал") for g in top_genres):
         return "Рок-тусовка"
     if any(g in ("hiphop", "хип-хоп") for g in top_genres):
@@ -149,8 +149,8 @@ def _derive_profile_name(stats: Dict[str, Any]) -> str:
 
 
 def _derive_vibe_text(stats: Dict[str, Any]) -> str:
-    mood = stats.get("dominant_mood")
     listening = stats.get("dominant_listening")
+    top_guilty = stats.get("top_guilty")
     parts = []
     if listening == "night":
         parts.extend(["ночные прогулки", "поздние сеты"])
@@ -158,12 +158,9 @@ def _derive_vibe_text(stats: Dict[str, Any]) -> str:
         parts.append("вечерние плейлисты")
     elif listening == "morning":
         parts.append("утренний кофе под музыку")
-    if mood == "energetic":
-        parts.append("драйв и движение")
-    elif mood == "melancholic":
-        parts.append("грустные воскресные утра")
-    elif mood == "calm":
-        parts.append("чилл и фон")
+    if top_guilty:
+        guilty_display = GENRE_DISPLAY.get(top_guilty, top_guilty)
+        parts.append(f"ненавидят {guilty_display}")
     if not parts:
         return "разный вайб, но в одном чате"
     return ", ".join(parts)
@@ -186,6 +183,8 @@ async def calculate_chat_profile(
     rare_count = stats.get("rare_count", 0)
     mainstream_count = stats.get("mainstream_count", 0)
 
+    top_guilty = stats.get("top_guilty")
+
     return ChatProfile(
         profile_name=profile_name,
         genre_stats=genre_stats,
@@ -195,6 +194,7 @@ async def calculate_chat_profile(
         avg_rarity=avg_rarity,
         rare_count=rare_count,
         mainstream_count=mainstream_count,
+        top_guilty=top_guilty,
     )
 
 

@@ -197,6 +197,11 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
             lines.append(f"  {name}: {pct}%")
     if profile.top_artists:
         lines.append("\n<b>Топ артистов:</b> " + ", ".join(profile.top_artists[:8]))
+    if profile.top_guilty:
+        from keyboards.data import GENRES as ALL_GENRES
+        guilty_display = {g["id"]: g["name"] for g in ALL_GENRES}
+        guilty_name = guilty_display.get(profile.top_guilty, profile.top_guilty)
+        lines.append(f"\n🤮 <b>Самый зашкварный жанр чата:</b> {guilty_name}")
     # Персонально для того, кто запросил скан
     requestor_id = message.from_user.id if message.from_user else None
     if requestor_id and participants >= 2:

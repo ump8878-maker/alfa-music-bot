@@ -40,7 +40,7 @@ def profile_completeness(profile: MusicProfile) -> float:
         filled += 1
     if profile.artists and len(profile.artists) > 0:
         filled += 1
-    if profile.mood:
+    if getattr(profile, "guilty_genres", None):
         filled += 1
     if getattr(profile, "listening_time", None):
         filled += 1
@@ -60,7 +60,7 @@ def get_taste_score_breakdown(profile: MusicProfile) -> TasteScoreBreakdown:
         filled += 1
     if profile.artists and len(profile.artists) > 0:
         filled += 1
-    if profile.mood:
+    if getattr(profile, "guilty_genres", None):
         filled += 1
     if getattr(profile, "listening_time", None):
         filled += 1
@@ -75,18 +75,16 @@ def get_taste_score_breakdown(profile: MusicProfile) -> TasteScoreBreakdown:
     r = getattr(profile, "rarity_score", 0.5) or 0.5
     rarity = int(r * MAX_RARITY)
 
-    # Бонус консистентности: время + настроение «в паре»
+    # Бонус: guilty_genres не пересекаются с любимыми — осознанный вкус
     consistency = 0
-    lt = (getattr(profile, "listening_time", None) or "").strip().lower()
-    mood = (profile.mood or "").strip().lower()
-    if lt and mood:
-        night_melancholic = lt == "night" and mood == "melancholic"
-        day_energetic = lt in ("day", "morning") and mood == "energetic"
-        evening_calm = lt == "evening" and mood == "calm"
-        if night_melancholic or day_energetic or evening_calm:
-            consistency = MAX_CONSISTENCY
-        elif lt != "anytime" and mood != "other":
-            consistency = 2  # частичный бонус
+    guilty = set(getattr(profile, "guilty_genres", None) or [])
+    fav = set(g.get("name", "") for g in (profile.genres or []))
+    if guilty:
+        overlap = guilty & fav
+        if not overlap:
+            consistency = MAX_CONSISTENCY  # зашквар и любимое не пересекаются
+        else:
+            consistency = max(0, MAX_CONSISTENCY - len(overlap) * 2)
 
     total = min(100, completeness + diversity + rarity + consistency)
     return TasteScoreBreakdown(
@@ -113,7 +111,7 @@ def get_taste_explanation(profile: MusicProfile) -> str:
     if b.rarity >= 10:
         parts.append("редкий вкус даёт бонус")
     if b.consistency > 0:
-        parts.append("время и настроение в ладу — бонус")
+        parts.append("зашквар не пересекается с любимым — бонус")
     if not parts:
         return "Пройди квиз до конца и выбери разнообразнее — балл вырастет."
     return " · ".join(parts).capitalize() + "."
@@ -174,9 +172,9 @@ async def get_chat_member_ranking(
     profiles = {p.user_id: p for p in profiles_result.scalars().all()}
 
     rows = []
-    for m in members:
-        u = users.get(m.user_id)
-        p = profiles.get(m.user_id)
+    for uid in user_ids:
+        u = users.get(uid)
+        p = profiles.get(uid)
         if not u or not p:
             continue
         taste = compute_user_taste_score(p)
@@ -279,11 +277,14 @@ def _taste_similarity(p1: MusicProfile, p2: MusicProfile) -> float:
     a2.discard("")
     jaccard_g = len(g1 & g2) / len(g1 | g2) if (g1 or g2) else 0
     jaccard_a = len(a1 & a2) / len(a1 | a2) if (a1 or a2) else 0
-    if p1.mood and p2.mood and p1.mood == p2.mood:
-        mood_bonus = 0.1
+    # Бонус за совпадение зашкварных жанров
+    gg1 = set(getattr(p1, "guilty_genres", None) or [])
+    gg2 = set(getattr(p2, "guilty_genres", None) or [])
+    if gg1 and gg2 and (gg1 & gg2):
+        guilty_bonus = 0.1
     else:
-        mood_bonus = 0
-    return min(1.0, (jaccard_g * 0.5 + jaccard_a * 0.5) + mood_bonus)
+        guilty_bonus = 0
+    return min(1.0, (jaccard_g * 0.5 + jaccard_a * 0.5) + guilty_bonus)
 
 
 def find_closest_in_ranking(

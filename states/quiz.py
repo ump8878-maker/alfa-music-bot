@@ -6,4 +6,5 @@ class QuizStates(StatesGroup):
     selecting_artists = State()
     entering_custom_artist = State()
     selecting_when_listen = State()
-    selecting_mood = State()
+    selecting_guilty = State()
+    selecting_mood = State()  # legacy, kept for old sessions

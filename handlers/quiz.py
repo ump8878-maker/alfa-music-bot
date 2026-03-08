@@ -1,4 +1,4 @@
-# Квиз: жанры → артисты → когда слушаешь → настроение
+# Квиз: жанры → артисты → когда слушаешь → зашкварные жанры
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -10,7 +10,7 @@ from keyboards import (
     get_genre_keyboard,
     get_artist_keyboard,
     get_when_listen_keyboard,
-    get_mood_keyboard,
+    get_guilty_keyboard,
     get_finish_quiz_keyboard,
 )
 from keyboards.data import GENRES
@@ -161,30 +161,50 @@ async def artists_skip(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(QuizStates.selecting_when_listen, F.data.startswith("when:"))
 async def select_when(callback: CallbackQuery, state: FSMContext):
     when_id = callback.data.split(":")[1]
-    await state.update_data(listening_time=when_id)
-    await state.set_state(QuizStates.selecting_mood)
-    text = "🌙 <b>Шаг 4/4: Какое настроение чаще ищешь в музыке?</b>"
+    await state.update_data(listening_time=when_id, selected_guilty=[])
+    await state.set_state(QuizStates.selecting_guilty)
+    text = (
+        "🤮 <b>Шаг 4/4: Какие стили считаешь самыми зашкварными?</b>\n\n"
+        "Выбери жанры, которые терпеть не можешь, или пропусти."
+    )
     await callback.message.edit_text(
         text,
-        reply_markup=get_mood_keyboard(),
+        reply_markup=get_guilty_keyboard(set()),
         parse_mode="HTML",
     )
     await callback.answer()
 
 
-@router.callback_query(QuizStates.selecting_mood, F.data.startswith("mood:"))
-async def select_mood_and_finish(
+@router.callback_query(QuizStates.selecting_guilty, F.data.startswith("guilty:"))
+async def select_guilty(callback: CallbackQuery, state: FSMContext):
+    genre_id = callback.data.split(":")[1]
+    data = await state.get_data()
+    selected = set(data.get("selected_guilty") or [])
+    if genre_id in selected:
+        selected.discard(genre_id)
+    elif len(selected) < 4:
+        selected.add(genre_id)
+    else:
+        await callback.answer("Максимум 4 зашкварных жанра", show_alert=True)
+        return
+    await state.update_data(selected_guilty=list(selected))
+    await callback.message.edit_reply_markup(reply_markup=get_guilty_keyboard(selected))
+    await callback.answer()
+
+
+@router.callback_query(QuizStates.selecting_guilty, F.data == "guilty_done")
+async def guilty_done_and_finish(
     callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
 ):
-    mood_id = callback.data.split(":")[1]
     data = await state.get_data()
     user_id = callback.from_user.id
     chat_id = data.get("from_chat_id")
     selected_genres = list(data.get("selected_genres") or [])
     selected_artists = list(data.get("selected_artists") or [])
     listening_time = data.get("listening_time") or "anytime"
+    guilty = list(data.get("selected_guilty") or [])
 
     genres = [{"name": g, "weight": 1.0} for g in selected_genres]
     artists = [{"name": a} for a in selected_artists]
@@ -197,7 +217,7 @@ async def select_mood_and_finish(
     if profile:
         profile.genres = genres
         profile.artists = artists
-        profile.mood = mood_id
+        profile.guilty_genres = guilty
         profile.listening_time = listening_time
         profile.rarity_score = rarity
     else:
@@ -205,7 +225,7 @@ async def select_mood_and_finish(
             user_id=user_id,
             genres=genres,
             artists=artists,
-            mood=mood_id,
+            guilty_genres=guilty,
             listening_time=listening_time,
             rarity_score=rarity,
         )
@@ -223,7 +243,7 @@ async def select_mood_and_finish(
             "genres": selected_genres,
             "artists": selected_artists,
             "listening_time": listening_time,
-            "mood": mood_id,
+            "guilty_genres": guilty,
         },
         score=float(taste_score),
     )
@@ -263,12 +283,16 @@ async def select_mood_and_finish(
         f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         f"📤 <i>Скопируй и поделись:</i>\n<code>{share_line}</code>\n"
     )
+    if guilty:
+        from keyboards.data import GENRES as ALL_GENRES
+        guilty_map = {g["id"]: g["name"] for g in ALL_GENRES}
+        guilty_names = [guilty_map.get(g, g) for g in guilty]
+        result_text += f"\n🤮 <b>Зашквар:</b> {', '.join(guilty_names)}\n"
     if chat_id:
         my_rank = await get_user_rank_in_chat(session, user_id, chat_id)
         if my_rank:
             comment = get_top_comment(my_rank)
-            result_text += f"\n\n🏆 <b>Место в чате: #{my_rank}</b>. {comment.capitalize()}"
-        # Соревновательность: кого обогнать
+            result_text += f"\n🏆 <b>Место в чате: #{my_rank}</b>. {comment.capitalize()}"
         competitor = await get_competitor_above(session, chat_id, user_id)
         if competitor:
             rank_above, user_above, score_above = competitor

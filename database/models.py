@@ -161,6 +161,7 @@ class MusicProfile(Base):
     era: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     language_pref: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     listening_time: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    guilty_genres: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     rarity_score: Mapped[float] = mapped_column(Float, default=0.5)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -202,12 +203,12 @@ class MusicProfile(Base):
             return "🎛 Электронщик"
         if "jazz" in genre_names or "soul" in genre_names:
             return "🎷 Джазовая душа"
-        if self.mood == "melancholic":
-            return "🌙 Меланхолик"
-        if self.mood == "energetic":
-            return "☀️ Энерджайзер"
-        if self.mood == "calm":
-            return "🌊 Чиллер"
+        guilty = set(self.guilty_genres or [])
+        fav = set(g.get("name", "").lower() for g in (self.genres or []))
+        if guilty and not (guilty & fav):
+            return "🧠 Осознанный слушатель"
+        if len(guilty) >= 3:
+            return "🤮 Музыкальный сноб"
         if len(self.genres or []) >= 3:
             return "🎭 Музыкальный хамелеон"
         return "🎧 Меломан"

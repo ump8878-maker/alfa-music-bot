@@ -68,6 +68,9 @@ MOODS = [
     {"id": "other", "name": "Свой вариант", "emoji": "✨"},
 ]
 
+# Жанры для шага «зашкварные» — те же основные жанры (без "other")
+GUILTY_GENRES = [g for g in GENRES if g["id"] != "other"]
+
 WHEN_LISTEN = [
     {"id": "morning", "name": "Утром", "emoji": "🌅"},
     {"id": "day", "name": "Днём", "emoji": "☀️"},
