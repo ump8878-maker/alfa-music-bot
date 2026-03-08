@@ -192,6 +192,23 @@ async def select_guilty(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# Fallback: пользователи, застрявшие в старом selecting_mood → перенаправляем на guilty
+@router.callback_query(QuizStates.selecting_mood)
+async def legacy_mood_redirect(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(selected_guilty=[])
+    await state.set_state(QuizStates.selecting_guilty)
+    text = (
+        "🤮 <b>Шаг 4/4: Какие стили считаешь самыми зашкварными?</b>\n\n"
+        "Выбери жанры, которые терпеть не можешь, или пропусти."
+    )
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_guilty_keyboard(set()),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
 @router.callback_query(QuizStates.selecting_guilty, F.data == "guilty_done")
 async def guilty_done_and_finish(
     callback: CallbackQuery,

@@ -27,3 +27,13 @@ class Base(DeclarativeBase):
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Добавляем новые колонки если их нет (SQLite не поддерживает IF NOT EXISTS для ALTER)
+        from sqlalchemy import text, inspect as sa_inspect
+        def _ensure_columns(connection):
+            inspector = sa_inspect(connection)
+            columns = {c["name"] for c in inspector.get_columns("music_profiles")}
+            if "guilty_genres" not in columns:
+                connection.execute(text(
+                    "ALTER TABLE music_profiles ADD COLUMN guilty_genres JSON"
+                ))
+        await conn.run_sync(_ensure_columns)
