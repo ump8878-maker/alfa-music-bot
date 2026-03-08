@@ -1,7 +1,7 @@
 # Чат: добавление бота, /chat_scan, /chat_rating, /top_chats, growth
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, ChatMemberUpdated
+from aiogram.types import Message, ChatMemberUpdated, CallbackQuery
 from aiogram.enums import ChatType
 from aiogram.filters import ChatMemberUpdatedFilter, IS_MEMBER, IS_NOT_MEMBER, Command
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from config import settings
 from database.models import User, Chat, ChatMember, MusicProfile
-from keyboards import get_chat_test_keyboard, get_chat_menu_keyboard
+from keyboards import get_chat_test_keyboard, get_chat_menu_keyboard, get_scan_footer_keyboard
 from services.chat_analytics import (
     calculate_chat_profile,
     generate_chat_comment,
@@ -219,7 +219,12 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
     lines.append(f"\n\n{comment}")
     lines.append(f"\n💬 {get_scan_trigger_question()}")
     text = "\n".join(lines)
-    await message.answer(text, parse_mode="HTML")
+    bot_info = await message.bot.get_me()
+    await message.answer(
+        text,
+        reply_markup=get_scan_footer_keyboard(bot_info.username, chat_id),
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("chat_top"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -257,7 +262,12 @@ async def cmd_chat_top(message: Message, session: AsyncSession) -> None:
         is_rarest = rarest and rarest[0].id == user.id
         rare_tag = " 🏅" if is_rarest else ""
         lines.append(f"  {badge} {name} — <b>{score}</b>/100{rare_tag}")
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    bot_info = await message.bot.get_me()
+    await message.answer(
+        "\n".join(lines),
+        reply_markup=get_scan_footer_keyboard(bot_info.username, chat_id),
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("chat_rating"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -396,3 +406,51 @@ async def cmd_match(message: Message, session: AsyncSession) -> None:
         lines.append("Пересечений не нашлось — вы из разных музыкальных вселенных.")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+@router.callback_query(F.data == "who_not_tested")
+async def cb_who_not_tested(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Показывает участников чата, которые ещё не прошли тест."""
+    chat_id = callback.message.chat.id
+
+    result = await session.execute(
+        select(ChatMember).where(ChatMember.chat_id == chat_id)
+    )
+    members = result.scalars().all()
+    if not members:
+        await callback.answer("Пока никто не добавлен.", show_alert=True)
+        return
+
+    not_tested_ids = [m.user_id for m in members if not m.has_completed_test]
+    tested_count = sum(1 for m in members if m.has_completed_test)
+
+    if not not_tested_ids:
+        await callback.answer("Все участники уже прошли тест! 🎉", show_alert=True)
+        return
+
+    users_result = await session.execute(
+        select(User).where(User.id.in_(not_tested_ids))
+    )
+    users = users_result.scalars().all()
+
+    lines = [
+        f"❓ <b>Ещё не прошли тест:</b> {len(not_tested_ids)} чел.\n"
+        f"✅ Прошли: {tested_count}\n",
+    ]
+    for i, u in enumerate(users[:15], 1):
+        name = u.display_name or u.mention or "Участник"
+        if len(name) > 22:
+            name = name[:19] + "…"
+        lines.append(f"  {i}. {name}")
+    if len(users) > 15:
+        lines.append(f"  …и ещё {len(users) - 15}")
+
+    lines.append("\nПозовите их пройти тест — чат поднимется в рейтинге!")
+
+    bot_info = await callback.bot.get_me()
+    await callback.message.answer(
+        "\n".join(lines),
+        reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
+        parse_mode="HTML",
+    )
+    await callback.answer()
