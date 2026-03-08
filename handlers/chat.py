@@ -19,6 +19,7 @@ from services.rating_helpers import (
     find_rarest_user,
     find_closest_in_ranking,
     calc_rarity_percentile,
+    compute_match,
 )
 from services.chat_rating import (
     calculate_chat_rating,
@@ -27,7 +28,7 @@ from services.chat_rating import (
     get_global_chat_ranking,
     get_needed_participants_for_next_rank,
 )
-from utils.humor import get_scan_trigger_question
+from utils.humor import get_scan_trigger_question, get_match_comment
 
 logger = logging.getLogger(__name__)
 
@@ -298,4 +299,100 @@ async def cmd_top_chats(message: Message, session: AsyncSession) -> None:
     for i, (c, rating) in enumerate(ranking, 1):
         title = (c.title or f"Чат #{i}").replace("<", "").replace(">", "")
         lines.append(f"{i}. {title} — {rating}/100")
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+@router.message(Command("match"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def cmd_match(message: Message, session: AsyncSession) -> None:
+    """Совместимость двух участников: /match @username или реплай на сообщение."""
+    user1_id = message.from_user.id if message.from_user else None
+    if not user1_id:
+        return
+
+    # Определяем второго пользователя: реплай или @username в аргументах
+    user2 = None
+    if message.reply_to_message and message.reply_to_message.from_user:
+        u2 = message.reply_to_message.from_user
+        if not u2.is_bot:
+            user2 = await session.get(User, u2.id)
+    if not user2:
+        # Попробуем взять @username из текста после /match
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) > 1:
+            raw = parts[1].strip().lstrip("@")
+            if raw:
+                result = await session.execute(
+                    select(User).where(User.username == raw)
+                )
+                user2 = result.scalar_one_or_none()
+
+    if not user2:
+        await message.answer(
+            "Ответь на сообщение человека или напиши /match @username",
+            parse_mode="HTML",
+        )
+        return
+
+    if user2.id == user1_id:
+        await message.answer("Нельзя сравнить себя с собой — попробуй с кем-то другим.")
+        return
+
+    # Загружаем профили
+    p1_res = await session.execute(
+        select(MusicProfile).where(MusicProfile.user_id == user1_id)
+    )
+    p1 = p1_res.scalar_one_or_none()
+
+    p2_res = await session.execute(
+        select(MusicProfile).where(MusicProfile.user_id == user2.id)
+    )
+    p2 = p2_res.scalar_one_or_none()
+
+    if not p1 or not p2:
+        bot_info = await message.bot.get_me()
+        who = "Тебе" if not p1 else (user2.display_name or "Собеседнику")
+        await message.answer(
+            f"{who} нужно сначала пройти тест 👇",
+            reply_markup=get_chat_test_keyboard(bot_info.username, message.chat.id),
+            parse_mode="HTML",
+        )
+        return
+
+    match = compute_match(p1, p2)
+    user1 = await session.get(User, user1_id)
+    name1 = user1.display_name if user1 else "Ты"
+    name2 = user2.display_name or "Собеседник"
+
+    # Шкала совместимости
+    bar_len = 10
+    filled = int(match.similarity_pct / 100 * bar_len)
+    bar = "❤️" * filled + "🖤" * (bar_len - filled)
+
+    comment = get_match_comment(match.similarity_pct)
+
+    lines = [
+        f"🎧 <b>Музыкальный мэтч</b>\n",
+        f"<b>{name1}</b> × <b>{name2}</b>\n",
+        f"{bar} <b>{match.similarity_pct}%</b>\n",
+        f"<i>{comment}</i>\n",
+    ]
+
+    from keyboards.data import GENRES as ALL_GENRES
+    genre_map = {g["id"]: g["name"] for g in ALL_GENRES}
+
+    if match.common_genres:
+        names = [genre_map.get(g, g) for g in match.common_genres]
+        lines.append(f"🎵 <b>Общие жанры:</b> {', '.join(names)}")
+    if match.common_artists:
+        lines.append(f"🎤 <b>Общие артисты:</b> {', '.join(match.common_artists[:5])}")
+    if match.common_guilty:
+        names = [genre_map.get(g, g) for g in match.common_guilty]
+        lines.append(f"🤮 <b>Оба ненавидят:</b> {', '.join(names)}")
+    if match.enemy_genres:
+        names = [genre_map.get(g, g) for g in match.enemy_genres]
+        lines.append(f"⚔️ <b>Конфликт:</b> {', '.join(names)} — один любит, другой ненавидит")
+
+    if not any([match.common_genres, match.common_artists, match.common_guilty, match.enemy_genres]):
+        lines.append("Пересечений не нашлось — вы из разных музыкальных вселенных.")
+
     await message.answer("\n".join(lines), parse_mode="HTML")

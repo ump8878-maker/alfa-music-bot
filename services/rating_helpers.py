@@ -1,6 +1,6 @@
 """Хелперы для рейтинга: полнота профиля, вкус пользователя, жанры и участники чата."""
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import List, Tuple, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -348,3 +348,46 @@ async def get_rarity_percentile_in_chat(
     """Топ-X% по редкости в чате. Удобная обёртка с запросом."""
     ranking = await get_chat_member_ranking(session, chat_id)
     return calc_rarity_percentile(ranking, user_id)
+
+
+@dataclass
+class MatchResult:
+    """Результат сравнения двух музыкальных профилей."""
+    similarity_pct: int          # 0..100
+    common_genres: List[str]     # общие жанры
+    common_artists: List[str]    # общие артисты
+    common_guilty: List[str]     # общий зашквар
+    enemy_genres: List[str]      # один любит, другой считает зашкваром
+
+
+def compute_match(p1: MusicProfile, p2: MusicProfile) -> MatchResult:
+    """Детальное сравнение двух профилей для /match."""
+    sim = _taste_similarity(p1, p2)
+    similarity_pct = int(sim * 100)
+
+    g1 = set((g.get("name") or "").strip().lower() for g in (p1.genres or []))
+    g2 = set((g.get("name") or "").strip().lower() for g in (p2.genres or []))
+    g1.discard("")
+    g2.discard("")
+    common_genres = sorted(g1 & g2)
+
+    a1 = set((a.get("name") or "").strip() for a in (p1.artists or []))
+    a2 = set((a.get("name") or "").strip() for a in (p2.artists or []))
+    a1.discard("")
+    a2.discard("")
+    common_artists = sorted(a1 & a2, key=str.lower)
+
+    gg1 = set(getattr(p1, "guilty_genres", None) or [])
+    gg2 = set(getattr(p2, "guilty_genres", None) or [])
+    common_guilty = sorted(gg1 & gg2)
+
+    # «Конфликт»: один любит жанр, другой его ненавидит
+    enemy = sorted((g1 & gg2) | (g2 & gg1))
+
+    return MatchResult(
+        similarity_pct=similarity_pct,
+        common_genres=common_genres,
+        common_artists=common_artists,
+        common_guilty=common_guilty,
+        enemy_genres=enemy,
+    )
