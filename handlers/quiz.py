@@ -283,9 +283,8 @@ async def guilty_done_and_finish(
 
     await state.clear()
 
-    # Итог: архетип, разбивка балла, объяснение, фраза о вкусе, шаринг
+    # Итог: архетип, разбивка балла, фраза о вкусе, шаринг
     breakdown = get_taste_score_breakdown(profile)
-    explanation = get_taste_explanation(profile)
     taste_phrase = generate_taste_phrase(profile)
     bot_info = await callback.bot.get_me()
     share_link = f"https://t.me/{bot_info.username}"
@@ -296,7 +295,6 @@ async def guilty_done_and_finish(
         f"<b>Профиль:</b> {profile.profile_type}\n"
         f"<b>Вкус:</b> {breakdown.total}/100\n"
         f"<i>{breakdown.to_short_str()}</i>\n"
-        f"<b>Как считаем:</b> {explanation}\n"
         f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         f"📤 <i>Скопируй и поделись:</i>\n<code>{share_line}</code>\n"
     )
