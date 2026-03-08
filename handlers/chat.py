@@ -155,8 +155,6 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         f"<b>{profile.profile_name}</b>\n",
         f"Вайб: {profile.vibe_text}\n",
         progress_line,
-        f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
-        "<i>Балл вкуса: полнота квиза (30) + разнообразие жанров и артистов (50) + редкость (15) + бонус за вайб (5). Чем полнее и разнообразнее — тем выше.</i>\n",
         f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
         "<i>Шкала: слева — популярные чарты (Яндекс.Музыка, Beatport, DJ Mag), справа — более редкий вкус.</i>\n",
     ]
