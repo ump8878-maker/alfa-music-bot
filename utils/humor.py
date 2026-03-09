@@ -47,44 +47,6 @@ def get_scan_trigger_question() -> str:
     return random.choice(SCAN_TRIGGER_QUESTIONS)
 
 
-MATCH_COMMENTS_HIGH = [
-    "вы бы составили идеальный плейлист вместе",
-    "один AUX-кабель на двоих — не проблема",
-    "на вечеринке вы бы не дрались за колонку",
-    "музыкальные родственные души",
-]
-
-MATCH_COMMENTS_MID = [
-    "есть точки пересечения, но споры о плейлисте гарантированы",
-    "компромисс возможен, но кто-то уступит",
-    "в дороге придётся по очереди выбирать треки",
-    "не враги, но и не близнецы по вкусу",
-]
-
-MATCH_COMMENTS_LOW = [
-    "вам лучше слушать музыку в разных наушниках",
-    "музыкальные противоположности — зато интересно",
-    "общий плейлист? только через драку",
-    "ваш спор о музыке никогда не закончится",
-]
-
-MATCH_COMMENTS_ENEMY = [
-    "музыкальные враги. один любит то, что другой ненавидит",
-    "абсолютная противоположность — вам точно будет о чём спорить",
-    "ваши плейлисты — параллельные вселенные",
-]
-
-
-def get_match_comment(pct: int) -> str:
-    if pct >= 70:
-        return random.choice(MATCH_COMMENTS_HIGH)
-    if pct >= 40:
-        return random.choice(MATCH_COMMENTS_MID)
-    if pct >= 15:
-        return random.choice(MATCH_COMMENTS_LOW)
-    return random.choice(MATCH_COMMENTS_ENEMY)
-
-
 def get_top_comment(position: int) -> str:
     """Комментарий к месту в рейтинге чата (1, 2, 3...)."""
     if position == 1:

@@ -36,7 +36,6 @@ async def on_startup(bot: Bot) -> None:
         BotCommand(command="chat_scan", description="Скан вкусов чата"),
         BotCommand(command="chat_top", description="Рейтинг участников чата"),
         BotCommand(command="chat_rating", description="Рейтинг чата"),
-        BotCommand(command="match", description="Совместимость с другом"),
         BotCommand(command="help", description="Рейтинги, чаты, аналитика"),
     ])
     bot_info = await bot.get_me()

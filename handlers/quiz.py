@@ -192,23 +192,6 @@ async def select_guilty(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# Fallback: пользователи, застрявшие в старом selecting_mood → перенаправляем на guilty
-@router.callback_query(QuizStates.selecting_mood)
-async def legacy_mood_redirect(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(selected_guilty=[])
-    await state.set_state(QuizStates.selecting_guilty)
-    text = (
-        "🤮 <b>Шаг 4/4: Какие стили считаешь самыми зашкварными?</b>\n\n"
-        "Выбери жанры, которые терпеть не можешь, или пропусти."
-    )
-    await callback.message.edit_text(
-        text,
-        reply_markup=get_guilty_keyboard(set()),
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
 @router.callback_query(QuizStates.selecting_guilty, F.data == "guilty_done")
 async def guilty_done_and_finish(
     callback: CallbackQuery,
@@ -283,8 +266,9 @@ async def guilty_done_and_finish(
 
     await state.clear()
 
-    # Итог: архетип, разбивка балла, фраза о вкусе, шаринг
+    # Итог: архетип, разбивка балла, объяснение, фраза о вкусе, шаринг
     breakdown = get_taste_score_breakdown(profile)
+    explanation = get_taste_explanation(profile)
     taste_phrase = generate_taste_phrase(profile)
     bot_info = await callback.bot.get_me()
     share_link = f"https://t.me/{bot_info.username}"
@@ -295,6 +279,7 @@ async def guilty_done_and_finish(
         f"<b>Профиль:</b> {profile.profile_type}\n"
         f"<b>Вкус:</b> {breakdown.total}/100\n"
         f"<i>{breakdown.to_short_str()}</i>\n"
+        f"<b>Как считаем:</b> {explanation}\n"
         f"<b>Твой вайб:</b> {taste_phrase}\n\n"
         f"📤 <i>Скопируй и поделись:</i>\n<code>{share_line}</code>\n"
     )

@@ -1,7 +1,7 @@
 # Чат: добавление бота, /chat_scan, /chat_rating, /top_chats, growth
 import logging
 from aiogram import Router, F
-from aiogram.types import Message, ChatMemberUpdated, CallbackQuery
+from aiogram.types import Message, ChatMemberUpdated
 from aiogram.enums import ChatType
 from aiogram.filters import ChatMemberUpdatedFilter, IS_MEMBER, IS_NOT_MEMBER, Command
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from config import settings
 from database.models import User, Chat, ChatMember, MusicProfile
-from keyboards import get_chat_test_keyboard, get_chat_menu_keyboard, get_scan_footer_keyboard
+from keyboards import get_chat_test_keyboard, get_chat_menu_keyboard
 from services.chat_analytics import (
     calculate_chat_profile,
     generate_chat_comment,
@@ -19,7 +19,6 @@ from services.rating_helpers import (
     find_rarest_user,
     find_closest_in_ranking,
     calc_rarity_percentile,
-    compute_match,
 )
 from services.chat_rating import (
     calculate_chat_rating,
@@ -28,7 +27,7 @@ from services.chat_rating import (
     get_global_chat_ranking,
     get_needed_participants_for_next_rank,
 )
-from utils.humor import get_scan_trigger_question, get_match_comment
+from utils.humor import get_scan_trigger_question
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +154,8 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
         f"<b>{profile.profile_name}</b>\n",
         f"Вайб: {profile.vibe_text}\n",
         progress_line,
+        f"Средний вкус: <b>{profile.overall_score}/100</b>\n",
+        "<i>Балл вкуса: полнота квиза (30) + разнообразие жанров и артистов (50) + редкость (15) + бонус за вайб (5). Чем полнее и разнообразнее — тем выше.</i>\n",
         f"<b>Редкость:</b> {scale_bar} {rare_pct}% ({rarity_label})\n",
         "<i>Шкала: слева — популярные чарты (Яндекс.Музыка, Beatport, DJ Mag), справа — более редкий вкус.</i>\n",
     ]
@@ -217,12 +218,7 @@ async def cmd_chat_scan(message: Message, session: AsyncSession) -> None:
     lines.append(f"\n\n{comment}")
     lines.append(f"\n💬 {get_scan_trigger_question()}")
     text = "\n".join(lines)
-    bot_info = await message.bot.get_me()
-    await message.answer(
-        text,
-        reply_markup=get_scan_footer_keyboard(bot_info.username, chat_id),
-        parse_mode="HTML",
-    )
+    await message.answer(text, parse_mode="HTML")
 
 
 @router.message(Command("chat_top"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -260,12 +256,7 @@ async def cmd_chat_top(message: Message, session: AsyncSession) -> None:
         is_rarest = rarest and rarest[0].id == user.id
         rare_tag = " 🏅" if is_rarest else ""
         lines.append(f"  {badge} {name} — <b>{score}</b>/100{rare_tag}")
-    bot_info = await message.bot.get_me()
-    await message.answer(
-        "\n".join(lines),
-        reply_markup=get_scan_footer_keyboard(bot_info.username, chat_id),
-        parse_mode="HTML",
-    )
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("chat_rating"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -308,147 +299,3 @@ async def cmd_top_chats(message: Message, session: AsyncSession) -> None:
         title = (c.title or f"Чат #{i}").replace("<", "").replace(">", "")
         lines.append(f"{i}. {title} — {rating}/100")
     await message.answer("\n".join(lines), parse_mode="HTML")
-
-
-@router.message(Command("match"), F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
-async def cmd_match(message: Message, session: AsyncSession) -> None:
-    """Совместимость двух участников: /match @username или реплай на сообщение."""
-    user1_id = message.from_user.id if message.from_user else None
-    if not user1_id:
-        return
-
-    # Определяем второго пользователя: реплай или @username в аргументах
-    user2 = None
-    if message.reply_to_message and message.reply_to_message.from_user:
-        u2 = message.reply_to_message.from_user
-        if not u2.is_bot:
-            user2 = await session.get(User, u2.id)
-    if not user2:
-        # Попробуем взять @username из текста после /match
-        parts = (message.text or "").split(maxsplit=1)
-        if len(parts) > 1:
-            raw = parts[1].strip().lstrip("@")
-            if raw:
-                result = await session.execute(
-                    select(User).where(User.username == raw)
-                )
-                user2 = result.scalar_one_or_none()
-
-    if not user2:
-        await message.answer(
-            "Ответь на сообщение человека или напиши /match @username",
-            parse_mode="HTML",
-        )
-        return
-
-    if user2.id == user1_id:
-        await message.answer("Нельзя сравнить себя с собой — попробуй с кем-то другим.")
-        return
-
-    # Загружаем профили
-    p1_res = await session.execute(
-        select(MusicProfile).where(MusicProfile.user_id == user1_id)
-    )
-    p1 = p1_res.scalar_one_or_none()
-
-    p2_res = await session.execute(
-        select(MusicProfile).where(MusicProfile.user_id == user2.id)
-    )
-    p2 = p2_res.scalar_one_or_none()
-
-    if not p1 or not p2:
-        bot_info = await message.bot.get_me()
-        who = "Тебе" if not p1 else (user2.display_name or "Собеседнику")
-        await message.answer(
-            f"{who} нужно сначала пройти тест 👇",
-            reply_markup=get_chat_test_keyboard(bot_info.username, message.chat.id),
-            parse_mode="HTML",
-        )
-        return
-
-    match = compute_match(p1, p2)
-    user1 = await session.get(User, user1_id)
-    name1 = user1.display_name if user1 else "Ты"
-    name2 = user2.display_name or "Собеседник"
-
-    # Шкала совместимости
-    bar_len = 10
-    filled = int(match.similarity_pct / 100 * bar_len)
-    bar = "❤️" * filled + "🖤" * (bar_len - filled)
-
-    comment = get_match_comment(match.similarity_pct)
-
-    lines = [
-        f"🎧 <b>Музыкальный мэтч</b>\n",
-        f"<b>{name1}</b> × <b>{name2}</b>\n",
-        f"{bar} <b>{match.similarity_pct}%</b>\n",
-        f"<i>{comment}</i>\n",
-    ]
-
-    from keyboards.data import GENRES as ALL_GENRES
-    genre_map = {g["id"]: g["name"] for g in ALL_GENRES}
-
-    if match.common_genres:
-        names = [genre_map.get(g, g) for g in match.common_genres]
-        lines.append(f"🎵 <b>Общие жанры:</b> {', '.join(names)}")
-    if match.common_artists:
-        lines.append(f"🎤 <b>Общие артисты:</b> {', '.join(match.common_artists[:5])}")
-    if match.common_guilty:
-        names = [genre_map.get(g, g) for g in match.common_guilty]
-        lines.append(f"🤮 <b>Оба ненавидят:</b> {', '.join(names)}")
-    if match.enemy_genres:
-        names = [genre_map.get(g, g) for g in match.enemy_genres]
-        lines.append(f"⚔️ <b>Конфликт:</b> {', '.join(names)} — один любит, другой ненавидит")
-
-    if not any([match.common_genres, match.common_artists, match.common_guilty, match.enemy_genres]):
-        lines.append("Пересечений не нашлось — вы из разных музыкальных вселенных.")
-
-    await message.answer("\n".join(lines), parse_mode="HTML")
-
-
-@router.callback_query(F.data == "who_not_tested")
-async def cb_who_not_tested(callback: CallbackQuery, session: AsyncSession) -> None:
-    """Показывает участников чата, которые ещё не прошли тест."""
-    chat_id = callback.message.chat.id
-
-    result = await session.execute(
-        select(ChatMember).where(ChatMember.chat_id == chat_id)
-    )
-    members = result.scalars().all()
-    if not members:
-        await callback.answer("Пока никто не добавлен.", show_alert=True)
-        return
-
-    not_tested_ids = [m.user_id for m in members if not m.has_completed_test]
-    tested_count = sum(1 for m in members if m.has_completed_test)
-
-    if not not_tested_ids:
-        await callback.answer("Все участники уже прошли тест! 🎉", show_alert=True)
-        return
-
-    users_result = await session.execute(
-        select(User).where(User.id.in_(not_tested_ids))
-    )
-    users = users_result.scalars().all()
-
-    lines = [
-        f"❓ <b>Ещё не прошли тест:</b> {len(not_tested_ids)} чел.\n"
-        f"✅ Прошли: {tested_count}\n",
-    ]
-    for i, u in enumerate(users[:15], 1):
-        name = u.display_name or u.mention or "Участник"
-        if len(name) > 22:
-            name = name[:19] + "…"
-        lines.append(f"  {i}. {name}")
-    if len(users) > 15:
-        lines.append(f"  …и ещё {len(users) - 15}")
-
-    lines.append("\nПозовите их пройти тест — чат поднимется в рейтинге!")
-
-    bot_info = await callback.bot.get_me()
-    await callback.message.answer(
-        "\n".join(lines),
-        reply_markup=get_chat_test_keyboard(bot_info.username, chat_id),
-        parse_mode="HTML",
-    )
-    await callback.answer()
